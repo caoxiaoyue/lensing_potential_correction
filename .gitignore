@@ -1,0 +1,6 @@
+#mytest
+mytest/
+.vscode/
+**/*.pyc
+**/__pycache__/
+**/*.egg-info/
