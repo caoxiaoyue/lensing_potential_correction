@@ -383,41 +383,41 @@ def diff_2nd_operator_numba_func(mask, diff_types, dpix=1.0):
         if diff_types[i,j,1] == 0:
             rows_hxx[count_sparse_hxx] = count
             cols_hxx[count_sparse_hxx] = index_dict[(i,j-2)]
-            data_hxx[count_sparse_hxx] = 1.0/step_y**2
+            data_hxx[count_sparse_hxx] = 1.0/step_x**2
             count_sparse_hxx += 1
             rows_hxx[count_sparse_hxx] = count
             cols_hxx[count_sparse_hxx] = index_dict[(i,j-1)]
-            data_hxx[count_sparse_hxx] = -2.0/step_y**2
+            data_hxx[count_sparse_hxx] = -2.0/step_x**2
             count_sparse_hxx += 1
             rows_hxx[count_sparse_hxx] = count
             cols_hxx[count_sparse_hxx] = index_dict[(i,j)]
-            data_hxx[count_sparse_hxx] = 1.0/step_y**2
+            data_hxx[count_sparse_hxx] = 1.0/step_x**2
             count_sparse_hxx += 1
         elif diff_types[i,j,1] == 1:
             rows_hxx[count_sparse_hxx] = count
             cols_hxx[count_sparse_hxx] = index_dict[(i,j-1)]
-            data_hxx[count_sparse_hxx] = 1.0/step_y**2
+            data_hxx[count_sparse_hxx] = 1.0/step_x**2
             count_sparse_hxx += 1
             rows_hxx[count_sparse_hxx] = count
             cols_hxx[count_sparse_hxx] = index_dict[(i,j)]
-            data_hxx[count_sparse_hxx] = -2.0/step_y**2
+            data_hxx[count_sparse_hxx] = -2.0/step_x**2
             count_sparse_hxx += 1
             rows_hxx[count_sparse_hxx] = count
             cols_hxx[count_sparse_hxx] = index_dict[(i,j+1)]
-            data_hxx[count_sparse_hxx] = 1.0/step_y**2
+            data_hxx[count_sparse_hxx] = 1.0/step_x**2
             count_sparse_hxx += 1
         elif diff_types[i,j,1] == 2:
             rows_hxx[count_sparse_hxx] = count
             cols_hxx[count_sparse_hxx] = index_dict[(i,j)]
-            data_hxx[count_sparse_hxx] = 1.0/step_y**2
+            data_hxx[count_sparse_hxx] = 1.0/step_x**2
             count_sparse_hxx += 1
             rows_hxx[count_sparse_hxx] = count
             cols_hxx[count_sparse_hxx] = index_dict[(i,j+1)]
-            data_hxx[count_sparse_hxx] = -2.0/step_y**2
+            data_hxx[count_sparse_hxx] = -2.0/step_x**2
             count_sparse_hxx += 1
             rows_hxx[count_sparse_hxx] = count
             cols_hxx[count_sparse_hxx] = index_dict[(i,j+2)]
-            data_hxx[count_sparse_hxx] = 1.0/step_y**2
+            data_hxx[count_sparse_hxx] = 1.0/step_x**2
             count_sparse_hxx += 1
 
     return rows_hxx, cols_hxx, data_hxx, rows_hyy, cols_hyy, data_hyy
