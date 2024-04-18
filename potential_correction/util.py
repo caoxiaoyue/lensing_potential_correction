@@ -297,11 +297,11 @@ def diff_2nd_operator_numba_from(mask, dpix=1.0):
     new_mask, diff_types = iterative_clean_mask(mask)
     if not (new_mask == mask).all():
         raise Exception("the mask has not been fully cleaned!")
-    rows_hx, cols_hx, data_hx, rows_hy, cols_hy, data_hy = diff_2nd_operator_numba_func(mask, diff_types, dpix=dpix)
+    rows_hxx, cols_hxx, data_hxx, rows_hyy, cols_hyy, data_hyy = diff_2nd_operator_numba_func(mask, diff_types, dpix=dpix)
 
     n_unmasked = np.count_nonzero(~mask)
-    Hxx = csr_matrix((data_hx, (rows_hx, cols_hx)), shape=(n_unmasked, n_unmasked))
-    Hyy = csr_matrix((data_hy, (rows_hy, cols_hy)), shape=(n_unmasked, n_unmasked))
+    Hxx = csr_matrix((data_hxx, (rows_hxx, cols_hxx)), shape=(n_unmasked, n_unmasked))
+    Hyy = csr_matrix((data_hyy, (rows_hyy, cols_hyy)), shape=(n_unmasked, n_unmasked))
     return Hyy, Hxx
 
 
@@ -918,7 +918,7 @@ def log_det_mat(square_matrix, sparse=False):
 
 from skimage import measure
 from skimage.morphology import dilation
-def arc_mask_from(snr_map, min_size=100, threshold=3.0):
+def arc_mask_from(snr_map, threshold=3.0, ignor_size=25, ext_size=5):
     bool_map = (snr_map > threshold)
 
     # Label connected regions in the binary mask
@@ -928,13 +928,183 @@ def arc_mask_from(snr_map, min_size=100, threshold=3.0):
     properties = measure.regionprops(labels)
 
     # Identify the negative pixel islands
-    small_islands = [prop.label for prop in properties if prop.area < min_size]  # Adjust the area threshold as per your requirement
+    small_islands = [prop.label for prop in properties if prop.area < ignor_size]  # Adjust the area threshold as per your requirement
 
     # Create a new image with negative pixel islands removed
     mask = np.copy(bool_map)
     for island_label in small_islands:
         mask[labels == island_label] = 0
-    mask = dilation(mask, footprint=np.ones((5, 5)))
+    mask = dilation(mask, footprint=np.ones((ext_size, ext_size)))
 
-    mask = iterative_clean_mask(~mask, max_iter=50)
+    mask, _ = iterative_clean_mask(~mask, max_iter=50)
     return mask
+
+
+
+@numba.njit(cache=False, parallel=False)
+def diff_2nd_operator_dpsi_reg_numba_func(mask, dpix=1.0):
+    """
+    Receive a mask, use it to generate the 2nd differential operator matrix Hxx and Hyy.
+    Hxx (Hyy) has a shape of [n_unmasked_pixels, n_unmasked_pixels],
+    when it act on the unmasked data, generating the 2nd x/y-derivative of the unmasked data.
+    compare with the diff_2nd_operator_numba_func, only the forward scheme is used to calculate the 2nd x/y-derivative.
+    
+    dpix: pixel size in unit of arcsec.
+    """
+    unmask = ~mask
+    i_indices_unmasked, j_indices_unmasked = np.where(unmask)
+    n_unmasked_pixels = len(i_indices_unmasked) 
+
+    rows_hxx = np.full(n_unmasked_pixels*3, -1, dtype=np.int64)
+    cols_hxx = np.full(n_unmasked_pixels*3, -1, dtype=np.int64)
+    data_hxx = np.full(n_unmasked_pixels*3, 0.0, dtype='float')
+    rows_hyy = np.full(n_unmasked_pixels*3, -1, dtype=np.int64)
+    cols_hyy = np.full(n_unmasked_pixels*3, -1, dtype=np.int64)
+    data_hyy = np.full(n_unmasked_pixels*3, 0.0, dtype='float')
+
+    step_y = -1.0*dpix #the minus sign is due to the y-coordinate decrease the pixel_size as index i along axis-0 increase 1.
+    step_x = 1.0*dpix #no minus, becasue the x-coordinate increase as index j along axis-1 increase.
+
+    index_dict = {}
+    for count in range(n_unmasked_pixels):
+        i, j = i_indices_unmasked[count], j_indices_unmasked[count]
+        index_dict[(i,j)] = count
+
+    count_sparse_hyy = 0
+    count_sparse_hxx = 0
+    for count in range(n_unmasked_pixels):
+        i, j = i_indices_unmasked[count], j_indices_unmasked[count]
+
+        #check Hxx
+        if (j < unmask.shape[1]-3):
+            if unmask[i, j+1]:
+                if unmask[i, j+2]:
+                    #use 2nd diff forward reg
+                    rows_hxx[count_sparse_hxx] = count
+                    cols_hxx[count_sparse_hxx] = index_dict[(i,j)]
+                    data_hxx[count_sparse_hxx] = 1.0/step_x**2
+                    count_sparse_hxx += 1
+                    rows_hxx[count_sparse_hxx] = count
+                    cols_hxx[count_sparse_hxx] = index_dict[(i,j+1)]
+                    data_hxx[count_sparse_hxx] = -2.0/step_x**2
+                    count_sparse_hxx += 1
+                    rows_hxx[count_sparse_hxx] = count
+                    cols_hxx[count_sparse_hxx] = index_dict[(i,j+2)]
+                    data_hxx[count_sparse_hxx] = 1.0/step_x**2
+                    count_sparse_hxx += 1
+                else:
+                    #use 1st diff forward reg
+                    rows_hxx[count_sparse_hxx] = count
+                    cols_hxx[count_sparse_hxx] = index_dict[(i,j)]
+                    data_hxx[count_sparse_hxx] = -1.0/step_x
+                    count_sparse_hxx += 1
+                    rows_hxx[count_sparse_hxx] = count
+                    cols_hxx[count_sparse_hxx] = index_dict[(i,j+1)]
+                    data_hxx[count_sparse_hxx] = 1.0/step_x
+                    count_sparse_hxx += 1
+            else:
+                #use zero order reg
+                rows_hxx[count_sparse_hxx] = count
+                cols_hxx[count_sparse_hxx] = index_dict[(i,j)]
+                data_hxx[count_sparse_hxx] = 1.0
+                count_sparse_hxx += 1
+        elif (j < unmask.shape[1]-2):
+            if unmask[i, j+1]:
+                #use 1st diff forward reg
+                rows_hxx[count_sparse_hxx] = count
+                cols_hxx[count_sparse_hxx] = index_dict[(i,j)]
+                data_hxx[count_sparse_hxx] = -1.0/step_x
+                count_sparse_hxx += 1
+                rows_hxx[count_sparse_hxx] = count
+                cols_hxx[count_sparse_hxx] = index_dict[(i,j+1)]
+                data_hxx[count_sparse_hxx] = 1.0/step_x
+                count_sparse_hxx += 1
+            else:
+                #use zero order reg
+                rows_hxx[count_sparse_hxx] = count
+                cols_hxx[count_sparse_hxx] = index_dict[(i,j)]
+                data_hxx[count_sparse_hxx] = 1.0
+                count_sparse_hxx += 1
+        else:
+            #use zero order reg
+            rows_hxx[count_sparse_hxx] = count
+            cols_hxx[count_sparse_hxx] = index_dict[(i,j)]
+            data_hxx[count_sparse_hxx] = 1.0
+            count_sparse_hxx += 1
+
+        #check Hyy
+        if (i < unmask.shape[0]-3):
+            if unmask[i+1, j]:
+                if unmask[i+2, j]:
+                    #use 2nd diff forward reg
+                    rows_hyy[count_sparse_hyy] = count
+                    cols_hyy[count_sparse_hyy] = index_dict[(i,j)]
+                    data_hyy[count_sparse_hyy] = 1.0/step_y**2
+                    count_sparse_hyy += 1
+                    rows_hyy[count_sparse_hyy] = count
+                    cols_hyy[count_sparse_hyy] = index_dict[(i+1,j)]
+                    data_hyy[count_sparse_hyy] = -2.0/step_y**2
+                    count_sparse_hyy += 1
+                    rows_hyy[count_sparse_hyy] = count
+                    cols_hyy[count_sparse_hyy] = index_dict[(i+2,j)]
+                    data_hyy[count_sparse_hyy] = 1.0/step_y**2
+                    count_sparse_hyy += 1
+                else:
+                    #use 1st diff forward reg
+                    rows_hyy[count_sparse_hyy] = count
+                    cols_hyy[count_sparse_hyy] = index_dict[(i,j)]
+                    data_hyy[count_sparse_hyy] = -1.0/step_y
+                    count_sparse_hyy += 1
+                    rows_hyy[count_sparse_hyy] = count
+                    cols_hyy[count_sparse_hyy] = index_dict[(i+1,j)]
+                    data_hyy[count_sparse_hyy] = 1.0/step_y
+                    count_sparse_hyy += 1
+            else:
+                #use zero order reg
+                rows_hyy[count_sparse_hyy] = count
+                cols_hyy[count_sparse_hyy] = index_dict[(i,j)]
+                data_hyy[count_sparse_hyy] = 1.0
+                count_sparse_hyy += 1
+        elif (i < unmask.shape[0]-2):
+            if unmask[i+1, j]:
+                #use 1st diff forward reg
+                rows_hyy[count_sparse_hyy] = count
+                cols_hyy[count_sparse_hyy] = index_dict[(i,j)]
+                data_hyy[count_sparse_hyy] = -1.0/step_y
+                count_sparse_hyy += 1
+                rows_hyy[count_sparse_hyy] = count
+                cols_hyy[count_sparse_hyy] = index_dict[(i+1,j)]
+                data_hyy[count_sparse_hyy] = 1.0/step_y
+                count_sparse_hyy += 1
+            else:
+                #use zero order reg
+                rows_hyy[count_sparse_hyy] = count
+                cols_hyy[count_sparse_hyy] = index_dict[(i,j)]
+                data_hyy[count_sparse_hyy] = 1.0
+                count_sparse_hyy += 1
+        else:
+            #use zero order reg
+            rows_hyy[count_sparse_hyy] = count
+            cols_hyy[count_sparse_hyy] = index_dict[(i,j)]
+            data_hyy[count_sparse_hyy] = 1.0
+            count_sparse_hyy += 1
+
+    return rows_hxx[:count_sparse_hxx], cols_hxx[:count_sparse_hxx], data_hxx[:count_sparse_hxx], \
+        rows_hyy[:count_sparse_hyy], cols_hyy[:count_sparse_hyy], data_hyy[:count_sparse_hyy]
+
+        
+            
+def dpsi_curvature_reg_matrix_from(mask, return_H=False):
+    new_mask, diff_types = iterative_clean_mask(mask)
+    if not (new_mask == mask).all():
+        raise Exception("the mask has not been fully cleaned!")
+    rows_hxx, cols_hxx, data_hxx, rows_hyy, cols_hyy, data_hyy = diff_2nd_operator_dpsi_reg_numba_func(mask)
+
+    n_unmasked = np.count_nonzero(~mask)
+    Hxx = csr_matrix((data_hxx, (rows_hxx, cols_hxx)), shape=(n_unmasked, n_unmasked))
+    Hyy = csr_matrix((data_hyy, (rows_hyy, cols_hyy)), shape=(n_unmasked, n_unmasked))
+
+    if return_H:
+        return Hxx.T @ Hxx + Hyy.T @ Hyy, Hxx, Hyy
+    else:
+        return Hxx.T @ Hxx + Hyy.T @ Hyy
