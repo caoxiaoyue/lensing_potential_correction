@@ -35,6 +35,9 @@ class FitDpsiImaging:
         if preloads is not None:
             for key, value in preloads.items():
                 setattr(self, key, value)
+        
+        mask = al.Mask2D(mask=self.pair_dpsi_data_obj.mask_data, pixel_scales=self.masked_imaging.pixel_scales)
+        self.masked_imaging.apply_mask(mask=mask)
 
 
     @property
@@ -53,17 +56,18 @@ class FitDpsiImaging:
         return pul.source_gradient_matrix_from(self.source_gradient)
 
 
-    def pair_dpsi_data_mesh(self):
-        self.pair_dpsi_data_obj = self.dpsi_pixelization.pair_dpsi_data_mesh(
-            self.masked_imaging.mask, 
-            self.masked_imaging.pixel_scales[0], #assume a square pixel
-        )
+    @property
+    def pair_dpsi_data_obj(self):
+        if not hasattr(self, "_pair_dpsi_data_obj"):
+            self._pair_dpsi_data_obj = self.dpsi_pixelization.pair_dpsi_data_mesh(
+                self.masked_imaging.mask, 
+                self.masked_imaging.pixel_scales[0], #assume a square pixel
+            )
+        return self._pair_dpsi_data_obj
 
 
     @property
     def dpsi_gradient_matrix(self):
-        if not hasattr(self, "pair_dpsi_data_obj"):
-            self.pair_dpsi_data_mesh()
         if not hasattr(self, "itp_mat"):
             self.itp_mat = self.pair_dpsi_data_obj.itp_mat
         return pul.dpsi_gradient_matrix_from(self.itp_mat, self.pair_dpsi_data_obj.Hx_dpsi, self.pair_dpsi_data_obj.Hy_dpsi)
@@ -71,8 +75,6 @@ class FitDpsiImaging:
 
     @property
     def dpsi_regularization_matrix(self):
-        if not hasattr(self, "pair_dpsi_data_obj"):
-            self.pair_dpsi_data_mesh()
         if not hasattr(self, "dpsi_points"):
             self.dpsi_points = np.vstack([self.pair_dpsi_data_obj.ygrid_dpsi_1d, self.pair_dpsi_data_obj.xgrid_dpsi_1d]).T
         if not hasattr(self, "dpsi_reg_mat"):
