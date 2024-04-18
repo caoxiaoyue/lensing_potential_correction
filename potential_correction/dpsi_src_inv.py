@@ -11,6 +11,7 @@ import os
 from potential_correction.visualize import show_fit_dpsi_src
 from scipy.interpolate import RBFInterpolator
 import GPy
+from potential_correction.covariance_reg import CurvatureRegularizationDpsi, CovarianceRegularization
 
 
 class SrcFactory(ABC):
@@ -209,7 +210,12 @@ class FitDpsiSrcImaging:
         if not hasattr(self, "dpsi_points"):
             self.dpsi_points = np.vstack([self.pair_dpsi_data_obj.ygrid_dpsi_1d, self.pair_dpsi_data_obj.xgrid_dpsi_1d]).T
         if not hasattr(self, "dpsi_reg_mat"):
-            self.dpsi_reg_mat = self.dpsi_pixelization.regularization.regularization_matrix_from(self.dpsi_points)
+            if isinstance(self.dpsi_pixelization.regularization, CurvatureRegularizationDpsi):
+                self.dpsi_reg_mat = self.dpsi_pixelization.regularization.regularization_matrix_from(
+                    self.pair_dpsi_data_obj.mask_dpsi, 
+                )
+            elif isinstance(self.dpsi_pixelization.regularization, CovarianceRegularization):
+                self.dpsi_reg_mat = self.dpsi_pixelization.regularization.regularization_matrix_from(self.dpsi_points)
         return self.dpsi_reg_mat
     
     
@@ -303,10 +309,13 @@ class FitDpsiSrcImaging:
             self.log_det_reg_term_src = pul.log_det_mat(self.src_regularization_matrix, sparse=True) * 0.5
         except:
             raise Exception(f"The source regularization matrix is not positive definite.")
-        sign, logval = np.linalg.slogdet(self.dpsi_regularization_matrix)
-        if sign != 1:
-            raise Exception(f"The dpsi regularization matrix is not positive definite.")
-        self.log_det_reg_term_dpsi = logval * 0.5
+        try:
+            sign, logval = np.linalg.slogdet(self.dpsi_regularization_matrix)
+            if sign != 1:
+                raise Exception(f"The dpsi regularization matrix is not positive definite.")
+            self.log_det_reg_term_dpsi = logval * 0.5
+        except:
+            self.log_det_reg_term_dpsi = pul.log_det_mat(self.dpsi_regularization_matrix, sparse=True) * 0.5
         self.log_det_reg_term = self.log_det_reg_term_src + self.log_det_reg_term_dpsi
 
         #src-dpsi covariance term

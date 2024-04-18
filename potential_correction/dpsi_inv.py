@@ -4,6 +4,7 @@ import numpy as np
 from potential_correction import dpsi_mesh 
 from autoarray.inversion.regularization.abstract import AbstractRegularization
 import potential_correction.util as pul
+from potential_correction.covariance_reg import CurvatureRegularizationDpsi, CovarianceRegularization
 
 
 class DpsiPixelization:
@@ -74,7 +75,14 @@ class FitDpsiImaging:
             self.pair_dpsi_data_mesh()
         if not hasattr(self, "dpsi_points"):
             self.dpsi_points = np.vstack([self.pair_dpsi_data_obj.ygrid_dpsi_1d, self.pair_dpsi_data_obj.xgrid_dpsi_1d]).T
-        return self.dpsi_pixelization.regularization.regularization_matrix_from(self.dpsi_points)
+        if not hasattr(self, "dpsi_reg_mat"):
+            if isinstance(self.dpsi_pixelization.regularization, CurvatureRegularizationDpsi):
+                self.dpsi_reg_mat = self.dpsi_pixelization.regularization.regularization_matrix_from(
+                    self.pair_dpsi_data_obj.mask_dpsi, 
+                )
+            elif isinstance(self.dpsi_pixelization.regularization, CovarianceRegularization):
+                self.dpsi_reg_mat = self.dpsi_pixelization.regularization.regularization_matrix_from(self.dpsi_points)
+        return self.dpsi_reg_mat
 
 
     @property
@@ -135,10 +143,13 @@ class FitDpsiImaging:
         self.log_det_curve_reg_term = logval * (-0.5)
 
         #log det regularization matrix term
-        sign, logval = np.linalg.slogdet(self.reg_mat)
-        if sign != 1:
-            raise Exception(f"The regularization matrix is not positive definite.")
-        self.log_det_reg_term = logval * 0.5
+        try:
+            sign, logval = np.linalg.slogdet(self.reg_mat)
+            if sign != 1:
+                raise Exception(f"The regularization matrix is not positive definite.")
+            self.log_det_reg_term = logval * 0.5
+        except:
+            self.log_det_reg_term = pul.log_det_mat(self.reg_mat, sparse=True) * 0.5
 
         #dpsi covariance term
         reg_cov_term = self.dpsi_slim.T @ self.reg_mat @ self.dpsi_slim
