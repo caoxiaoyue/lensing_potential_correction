@@ -976,7 +976,7 @@ def diff_2nd_operator_dpsi_reg_numba_func(mask, dpix=1.0):
         i, j = i_indices_unmasked[count], j_indices_unmasked[count]
 
         #check Hxx
-        if (j < unmask.shape[1]-3):
+        if (j <= unmask.shape[1]-3):
             if unmask[i, j+1]:
                 if unmask[i, j+2]:
                     #use 2nd diff forward reg
@@ -1008,7 +1008,7 @@ def diff_2nd_operator_dpsi_reg_numba_func(mask, dpix=1.0):
                 cols_hxx[count_sparse_hxx] = index_dict[(i,j)]
                 data_hxx[count_sparse_hxx] = 1.0
                 count_sparse_hxx += 1
-        elif (j < unmask.shape[1]-2):
+        elif (j <= unmask.shape[1]-2):
             if unmask[i, j+1]:
                 #use 1st diff forward reg
                 rows_hxx[count_sparse_hxx] = count
@@ -1033,7 +1033,7 @@ def diff_2nd_operator_dpsi_reg_numba_func(mask, dpix=1.0):
             count_sparse_hxx += 1
 
         #check Hyy
-        if (i < unmask.shape[0]-3):
+        if (i <= unmask.shape[0]-3):
             if unmask[i+1, j]:
                 if unmask[i+2, j]:
                     #use 2nd diff forward reg
@@ -1065,7 +1065,7 @@ def diff_2nd_operator_dpsi_reg_numba_func(mask, dpix=1.0):
                 cols_hyy[count_sparse_hyy] = index_dict[(i,j)]
                 data_hyy[count_sparse_hyy] = 1.0
                 count_sparse_hyy += 1
-        elif (i < unmask.shape[0]-2):
+        elif (i <= unmask.shape[0]-2):
             if unmask[i+1, j]:
                 #use 1st diff forward reg
                 rows_hyy[count_sparse_hyy] = count
@@ -1108,3 +1108,422 @@ def dpsi_curvature_reg_matrix_from(mask, return_H=False):
         return Hxx.T @ Hxx + Hyy.T @ Hyy, Hxx, Hyy
     else:
         return Hxx.T @ Hxx + Hyy.T @ Hyy
+    
+
+
+@numba.njit(cache=False, parallel=False)
+def diff_4th_operator_dpsi_reg_numba_func(mask, dpix=1.0):
+    """
+    Receive a mask, use it to generate the th differential operator matrix H4x and H4y.
+    H4x (H4y) has a shape of [n_unmasked_pixels, n_unmasked_pixels],
+    when it act on the unmasked data, generating the 4th x/y-derivative of the unmasked data.
+    
+    dpix: pixel size in unit of arcsec.
+    """
+    unmask = ~mask
+    i_indices_unmasked, j_indices_unmasked = np.where(unmask)
+    n_unmasked_pixels = len(i_indices_unmasked) 
+
+    rows_h4x = np.full(n_unmasked_pixels*5, -1, dtype=np.int64)
+    cols_h4x = np.full(n_unmasked_pixels*5, -1, dtype=np.int64)
+    data_h4x = np.full(n_unmasked_pixels*5, 0.0, dtype='float')
+    rows_h4y = np.full(n_unmasked_pixels*5, -1, dtype=np.int64)
+    cols_h4y = np.full(n_unmasked_pixels*5, -1, dtype=np.int64)
+    data_h4y = np.full(n_unmasked_pixels*5, 0.0, dtype='float')
+
+    step_y = -1.0*dpix #the minus sign is due to the y-coordinate decrease the pixel_size as index i along axis-0 increase 1.
+    step_x = 1.0*dpix #no minus, becasue the x-coordinate increase as index j along axis-1 increase.
+
+    index_dict = {}
+    for count in range(n_unmasked_pixels):
+        i, j = i_indices_unmasked[count], j_indices_unmasked[count]
+        index_dict[(i,j)] = count
+
+    count_sparse_h4y = 0
+    count_sparse_h4x = 0
+    for count in range(n_unmasked_pixels):
+        i, j = i_indices_unmasked[count], j_indices_unmasked[count]
+
+        #check H4x
+        if (j <= unmask.shape[1]-5):
+            if unmask[i, j+1]:
+                if unmask[i, j+2]:
+                    if unmask[i, j+3]:
+                        if unmask[i, j+4]:
+                            #use 4th diff forward reg
+                            rows_h4x[count_sparse_h4x] = count
+                            cols_h4x[count_sparse_h4x] = index_dict[(i,j)]
+                            data_h4x[count_sparse_h4x] = 1.0/step_x**4
+                            count_sparse_h4x += 1
+                            rows_h4x[count_sparse_h4x] = count
+                            cols_h4x[count_sparse_h4x] = index_dict[(i,j+1)]
+                            data_h4x[count_sparse_h4x] = -4.0/step_x**4
+                            count_sparse_h4x += 1
+                            rows_h4x[count_sparse_h4x] = count
+                            cols_h4x[count_sparse_h4x] = index_dict[(i,j+2)]
+                            data_h4x[count_sparse_h4x] = 6.0/step_x**4
+                            count_sparse_h4x += 1
+                            rows_h4x[count_sparse_h4x] = count
+                            cols_h4x[count_sparse_h4x] = index_dict[(i,j+3)]
+                            data_h4x[count_sparse_h4x] = -4.0/step_x**4
+                            count_sparse_h4x += 1
+                            rows_h4x[count_sparse_h4x] = count
+                            cols_h4x[count_sparse_h4x] = index_dict[(i,j+4)]
+                            data_h4x[count_sparse_h4x] = 1.0/step_x**4
+                            count_sparse_h4x += 1
+                        else:
+                            #use 3rd diff forward reg
+                            rows_h4x[count_sparse_h4x] = count
+                            cols_h4x[count_sparse_h4x] = index_dict[(i,j)]
+                            data_h4x[count_sparse_h4x] = -1.0/step_x**3
+                            count_sparse_h4x += 1
+                            rows_h4x[count_sparse_h4x] = count
+                            cols_h4x[count_sparse_h4x] = index_dict[(i,j+1)]
+                            data_h4x[count_sparse_h4x] = 3.0/step_x**3
+                            count_sparse_h4x += 1
+                            rows_h4x[count_sparse_h4x] = count
+                            cols_h4x[count_sparse_h4x] = index_dict[(i,j+2)]
+                            data_h4x[count_sparse_h4x] = -3.0/step_x**3
+                            count_sparse_h4x += 1
+                            rows_h4x[count_sparse_h4x] = count
+                            cols_h4x[count_sparse_h4x] = index_dict[(i,j+3)]
+                            data_h4x[count_sparse_h4x] = 1.0/step_x**3
+                            count_sparse_h4x += 1
+                    else:
+                        #use 2nd diff forward reg
+                        rows_h4x[count_sparse_h4x] = count
+                        cols_h4x[count_sparse_h4x] = index_dict[(i,j)]
+                        data_h4x[count_sparse_h4x] = 1.0/step_x**2
+                        count_sparse_h4x += 1
+                        rows_h4x[count_sparse_h4x] = count
+                        cols_h4x[count_sparse_h4x] = index_dict[(i,j+1)]
+                        data_h4x[count_sparse_h4x] = -2.0/step_x**2
+                        count_sparse_h4x += 1
+                        rows_h4x[count_sparse_h4x] = count
+                        cols_h4x[count_sparse_h4x] = index_dict[(i,j+2)]
+                        data_h4x[count_sparse_h4x] = 1.0/step_x**2
+                        count_sparse_h4x += 1
+                else:
+                    #use 1st diff forward reg
+                    rows_h4x[count_sparse_h4x] = count
+                    cols_h4x[count_sparse_h4x] = index_dict[(i,j)]
+                    data_h4x[count_sparse_h4x] = -1.0/step_x
+                    count_sparse_h4x += 1
+                    rows_h4x[count_sparse_h4x] = count
+                    cols_h4x[count_sparse_h4x] = index_dict[(i,j+1)]
+                    data_h4x[count_sparse_h4x] = 1.0/step_x
+                    count_sparse_h4x += 1
+            else:
+                #use zero order reg
+                rows_h4x[count_sparse_h4x] = count
+                cols_h4x[count_sparse_h4x] = index_dict[(i,j)]
+                data_h4x[count_sparse_h4x] = 1.0
+                count_sparse_h4x += 1
+        elif (j <= unmask.shape[1]-4):
+            if unmask[i, j+1]:
+                if unmask[i, j+2]:
+                    if unmask[i, j+3]:
+                        #use 3rd diff forward reg
+                        rows_h4x[count_sparse_h4x] = count
+                        cols_h4x[count_sparse_h4x] = index_dict[(i,j)]
+                        data_h4x[count_sparse_h4x] = -1.0/step_x**3
+                        count_sparse_h4x += 1
+                        rows_h4x[count_sparse_h4x] = count
+                        cols_h4x[count_sparse_h4x] = index_dict[(i,j+1)]
+                        data_h4x[count_sparse_h4x] = 3.0/step_x**3
+                        count_sparse_h4x += 1
+                        rows_h4x[count_sparse_h4x] = count
+                        cols_h4x[count_sparse_h4x] = index_dict[(i,j+2)]
+                        data_h4x[count_sparse_h4x] = -3.0/step_x**3
+                        count_sparse_h4x += 1
+                        rows_h4x[count_sparse_h4x] = count
+                        cols_h4x[count_sparse_h4x] = index_dict[(i,j+3)]
+                        data_h4x[count_sparse_h4x] = 1.0/step_x**3
+                        count_sparse_h4x += 1
+                    else:
+                        #use 2nd diff forward reg
+                        rows_h4x[count_sparse_h4x] = count
+                        cols_h4x[count_sparse_h4x] = index_dict[(i,j)]
+                        data_h4x[count_sparse_h4x] = 1.0/step_x**2
+                        count_sparse_h4x += 1
+                        rows_h4x[count_sparse_h4x] = count
+                        cols_h4x[count_sparse_h4x] = index_dict[(i,j+1)]
+                        data_h4x[count_sparse_h4x] = -2.0/step_x**2
+                        count_sparse_h4x += 1
+                        rows_h4x[count_sparse_h4x] = count
+                        cols_h4x[count_sparse_h4x] = index_dict[(i,j+2)]
+                        data_h4x[count_sparse_h4x] = 1.0/step_x**2
+                        count_sparse_h4x += 1
+                else:
+                    #use 1st diff forward reg
+                    rows_h4x[count_sparse_h4x] = count
+                    cols_h4x[count_sparse_h4x] = index_dict[(i,j)]
+                    data_h4x[count_sparse_h4x] = -1.0/step_x
+                    count_sparse_h4x += 1
+                    rows_h4x[count_sparse_h4x] = count
+                    cols_h4x[count_sparse_h4x] = index_dict[(i,j+1)]
+                    data_h4x[count_sparse_h4x] = 1.0/step_x
+                    count_sparse_h4x += 1
+            else:
+                #use zero order reg
+                rows_h4x[count_sparse_h4x] = count
+                cols_h4x[count_sparse_h4x] = index_dict[(i,j)]
+                data_h4x[count_sparse_h4x] = 1.0
+                count_sparse_h4x += 1
+        elif (j <= unmask.shape[1]-3):
+            if unmask[i, j+1]:
+                if unmask[i, j+2]:
+                    #use 2nd diff forward reg
+                    rows_h4x[count_sparse_h4x] = count
+                    cols_h4x[count_sparse_h4x] = index_dict[(i,j)]
+                    data_h4x[count_sparse_h4x] = 1.0/step_x**2
+                    count_sparse_h4x += 1
+                    rows_h4x[count_sparse_h4x] = count
+                    cols_h4x[count_sparse_h4x] = index_dict[(i,j+1)]
+                    data_h4x[count_sparse_h4x] = -2.0/step_x**2
+                    count_sparse_h4x += 1
+                    rows_h4x[count_sparse_h4x] = count
+                    cols_h4x[count_sparse_h4x] = index_dict[(i,j+2)]
+                    data_h4x[count_sparse_h4x] = 1.0/step_x**2
+                    count_sparse_h4x += 1
+                else:
+                    #use 1st diff forward reg
+                    rows_h4x[count_sparse_h4x] = count
+                    cols_h4x[count_sparse_h4x] = index_dict[(i,j)]
+                    data_h4x[count_sparse_h4x] = -1.0/step_x
+                    count_sparse_h4x += 1
+                    rows_h4x[count_sparse_h4x] = count
+                    cols_h4x[count_sparse_h4x] = index_dict[(i,j+1)]
+                    data_h4x[count_sparse_h4x] = 1.0/step_x
+                    count_sparse_h4x += 1
+            else:
+                #use zero order reg
+                rows_h4x[count_sparse_h4x] = count
+                cols_h4x[count_sparse_h4x] = index_dict[(i,j)]
+                data_h4x[count_sparse_h4x] = 1.0
+                count_sparse_h4x += 1
+        elif (j <= unmask.shape[1]-2):
+            if unmask[i, j+1]:
+                #use 1st diff forward reg
+                rows_h4x[count_sparse_h4x] = count
+                cols_h4x[count_sparse_h4x] = index_dict[(i,j)]
+                data_h4x[count_sparse_h4x] = -1.0/step_x
+                count_sparse_h4x += 1
+                rows_h4x[count_sparse_h4x] = count
+                cols_h4x[count_sparse_h4x] = index_dict[(i,j+1)]
+                data_h4x[count_sparse_h4x] = 1.0/step_x
+                count_sparse_h4x += 1
+            else:
+                #use zero order reg
+                rows_h4x[count_sparse_h4x] = count
+                cols_h4x[count_sparse_h4x] = index_dict[(i,j)]
+                data_h4x[count_sparse_h4x] = 1.0
+                count_sparse_h4x += 1
+        else:
+            #use zero order reg
+            rows_h4x[count_sparse_h4x] = count
+            cols_h4x[count_sparse_h4x] = index_dict[(i,j)]
+            data_h4x[count_sparse_h4x] = 1.0
+            count_sparse_h4x += 1
+
+        
+        #check H4y
+        if (i <= unmask.shape[0]-5):
+            if unmask[i+1, j]:
+                if unmask[i+2, j]:
+                    if unmask[i+3, j]:
+                        if unmask[i+4, j]:
+                            #use 4th diff forward reg
+                            rows_h4y[count_sparse_h4y] = count
+                            cols_h4y[count_sparse_h4y] = index_dict[(i,j)]
+                            data_h4y[count_sparse_h4y] = 1.0/step_y**4
+                            count_sparse_h4y += 1
+                            rows_h4y[count_sparse_h4y] = count
+                            cols_h4y[count_sparse_h4y] = index_dict[(i+1,j)]
+                            data_h4y[count_sparse_h4y] = -4.0/step_y**4
+                            count_sparse_h4y += 1
+                            rows_h4y[count_sparse_h4y] = count
+                            cols_h4y[count_sparse_h4y] = index_dict[(i+2,j)]                            
+                            data_h4y[count_sparse_h4y] = 6.0/step_y**4
+                            count_sparse_h4y += 1
+                            rows_h4y[count_sparse_h4y] = count
+                            cols_h4y[count_sparse_h4y] = index_dict[(i+3,j)]
+                            data_h4y[count_sparse_h4y] = -4.0/step_y**4
+                            count_sparse_h4y += 1
+                            rows_h4y[count_sparse_h4y] = count
+                            cols_h4y[count_sparse_h4y] = index_dict[(i+4,j)]
+                            data_h4y[count_sparse_h4y] = 1.0/step_y**4
+                            count_sparse_h4y += 1
+                        else:
+                            #use 3rd diff forward reg
+                            rows_h4y[count_sparse_h4y] = count
+                            cols_h4y[count_sparse_h4y] = index_dict[(i,j)]
+                            data_h4y[count_sparse_h4y] = -1.0/step_y**3
+                            count_sparse_h4y += 1
+                            rows_h4y[count_sparse_h4y] = count
+                            cols_h4y[count_sparse_h4y] = index_dict[(i+1,j)]
+                            data_h4y[count_sparse_h4y] = 3.0/step_y**3
+                            count_sparse_h4y += 1
+                            rows_h4y[count_sparse_h4y] = count
+                            cols_h4y[count_sparse_h4y] = index_dict[(i+2,j)]
+                            data_h4y[count_sparse_h4y] = -3.0/step_y**3
+                            count_sparse_h4y += 1
+                            rows_h4y[count_sparse_h4y] = count
+                            cols_h4y[count_sparse_h4y] = index_dict[(i+3,j)]
+                            data_h4y[count_sparse_h4y] = 1.0/step_y**3
+                            count_sparse_h4y += 1
+                    else:
+                        #use 2nd diff forward reg
+                        rows_h4y[count_sparse_h4y] = count
+                        cols_h4y[count_sparse_h4y] = index_dict[(i,j)]
+                        data_h4y[count_sparse_h4y] = 1.0/step_y**2
+                        count_sparse_h4y += 1
+                        rows_h4y[count_sparse_h4y] = count
+                        cols_h4y[count_sparse_h4y] = index_dict[(i+1,j)]
+                        data_h4y[count_sparse_h4y] = -2.0/step_y**2
+                        count_sparse_h4y += 1
+                        rows_h4y[count_sparse_h4y] = count
+                        cols_h4y[count_sparse_h4y] = index_dict[(i+2,j)]
+                        data_h4y[count_sparse_h4y] = 1.0/step_y**2
+                        count_sparse_h4y += 1
+                else:
+                    #use 1st diff forward reg
+                    rows_h4y[count_sparse_h4y] = count
+                    cols_h4y[count_sparse_h4y] = index_dict[(i,j)]
+                    data_h4y[count_sparse_h4y] = -1.0/step_y
+                    count_sparse_h4y += 1
+                    rows_h4y[count_sparse_h4y] = count
+                    cols_h4y[count_sparse_h4y] = index_dict[(i+1,j)]
+                    data_h4y[count_sparse_h4y] = 1.0/step_y
+                    count_sparse_h4y += 1
+            else:
+                #use zero order reg
+                rows_h4y[count_sparse_h4y] = count
+                cols_h4y[count_sparse_h4y] = index_dict[(i,j)]
+                data_h4y[count_sparse_h4y] = 1.0
+                count_sparse_h4y += 1
+        elif (i <= unmask.shape[0]-4):
+            if unmask[i+1, j]:
+                if unmask[i+2, j]:
+                    if unmask[i+3, j]:
+                        #use 3rd diff forward reg
+                        rows_h4y[count_sparse_h4y] = count
+                        cols_h4y[count_sparse_h4y] = index_dict[(i,j)]
+                        data_h4y[count_sparse_h4y] = -1.0/step_y**3
+                        count_sparse_h4y += 1
+                        rows_h4y[count_sparse_h4y] = count
+                        cols_h4y[count_sparse_h4y] = index_dict[(i+1,j)]
+                        data_h4y[count_sparse_h4y] = 3.0/step_y**3
+                        count_sparse_h4y += 1
+                        rows_h4y[count_sparse_h4y] = count
+                        cols_h4y[count_sparse_h4y] = index_dict[(i+2,j)]
+                        data_h4y[count_sparse_h4y] = -3.0/step_y**3
+                        count_sparse_h4y += 1
+                        rows_h4y[count_sparse_h4y] = count
+                        cols_h4y[count_sparse_h4y] = index_dict[(i+3,j)]
+                        data_h4y[count_sparse_h4y] = 1.0/step_y**3
+                        count_sparse_h4y += 1
+                    else:
+                        #use 2nd diff forward reg
+                        rows_h4y[count_sparse_h4y] = count
+                        cols_h4y[count_sparse_h4y] = index_dict[(i,j)]
+                        data_h4y[count_sparse_h4y] = 1.0/step_y**2
+                        count_sparse_h4y += 1
+                        rows_h4y[count_sparse_h4y] = count
+                        cols_h4y[count_sparse_h4y] = index_dict[(i+1,j)]
+                        data_h4y[count_sparse_h4y] = -2.0/step_y**2
+                        count_sparse_h4y += 1
+                        rows_h4y[count_sparse_h4y] = count
+                        cols_h4y[count_sparse_h4y] = index_dict[(i+2,j)]
+                        data_h4y[count_sparse_h4y] = 1.0/step_y**2
+                        count_sparse_h4y += 1
+                else:
+                    #use 1st diff forward reg
+                    rows_h4y[count_sparse_h4y] = count
+                    cols_h4y[count_sparse_h4y] = index_dict[(i,j)]
+                    data_h4y[count_sparse_h4y] = -1.0/step_y
+                    count_sparse_h4y += 1
+                    rows_h4y[count_sparse_h4y] = count
+                    cols_h4y[count_sparse_h4y] = index_dict[(i+1,j)]
+                    data_h4y[count_sparse_h4y] = 1.0/step_y
+                    count_sparse_h4y += 1
+            else:
+                #use zero order reg
+                rows_h4y[count_sparse_h4y] = count
+                cols_h4y[count_sparse_h4y] = index_dict[(i,j)]
+                data_h4y[count_sparse_h4y] = 1.0
+                count_sparse_h4y += 1
+        elif (i <= unmask.shape[0]-3):
+            if unmask[i+1, j]:
+                if unmask[i+2, j]:
+                    #use 2nd diff forward reg
+                    rows_h4y[count_sparse_h4y] = count
+                    cols_h4y[count_sparse_h4y] = index_dict[(i,j)]
+                    data_h4y[count_sparse_h4y] = 1.0/step_y**2
+                    count_sparse_h4y += 1
+                    rows_h4y[count_sparse_h4y] = count
+                    cols_h4y[count_sparse_h4y] = index_dict[(i+1,j)]
+                    data_h4y[count_sparse_h4y] = -2.0/step_y**2
+                    count_sparse_h4y += 1
+                    rows_h4y[count_sparse_h4y] = count
+                    cols_h4y[count_sparse_h4y] = index_dict[(i+2,j)]
+                    data_h4y[count_sparse_h4y] = 1.0/step_y**2
+                    count_sparse_h4y += 1
+                else:
+                    #use 1st diff forward reg
+                    rows_h4y[count_sparse_h4y] = count
+                    cols_h4y[count_sparse_h4y] = index_dict[(i,j)]
+                    data_h4y[count_sparse_h4y] = -1.0/step_y
+                    count_sparse_h4y += 1
+                    rows_h4y[count_sparse_h4y] = count
+                    cols_h4y[count_sparse_h4y] = index_dict[(i+1,j)]
+                    data_h4y[count_sparse_h4y] = 1.0/step_y
+                    count_sparse_h4y += 1
+            else:
+                #use zero order reg
+                rows_h4y[count_sparse_h4y] = count
+                cols_h4y[count_sparse_h4y] = index_dict[(i,j)]
+                data_h4y[count_sparse_h4y] = 1.0
+                count_sparse_h4y += 1
+        elif (i <= unmask.shape[0]-2):
+            if unmask[i+1, j]:
+                #use 1st diff forward reg
+                rows_h4y[count_sparse_h4y] = count
+                cols_h4y[count_sparse_h4y] = index_dict[(i,j)]
+                data_h4y[count_sparse_h4y] = -1.0/step_y
+                count_sparse_h4y += 1
+                rows_h4y[count_sparse_h4y] = count
+                cols_h4y[count_sparse_h4y] = index_dict[(i+1,j)]
+                data_h4y[count_sparse_h4y] = 1.0/step_y
+                count_sparse_h4y += 1
+            else:
+                #use zero order reg
+                rows_h4y[count_sparse_h4y] = count
+                cols_h4y[count_sparse_h4y] = index_dict[(i,j)]
+                data_h4y[count_sparse_h4y] = 1.0
+                count_sparse_h4y += 1
+        else:
+            #use zero order reg
+            rows_h4y[count_sparse_h4y] = count
+            cols_h4y[count_sparse_h4y] = index_dict[(i,j)]
+            data_h4y[count_sparse_h4y] = 1.0
+            count_sparse_h4y += 1
+            
+    return rows_h4x[:count_sparse_h4x], cols_h4x[:count_sparse_h4x], data_h4x[:count_sparse_h4x], \
+        rows_h4y[:count_sparse_h4y], cols_h4y[:count_sparse_h4y], data_h4y[:count_sparse_h4y]
+
+
+def dpsi_4th_reg_matrix_from(mask, return_H=False):
+    new_mask, diff_types = iterative_clean_mask(mask)
+    if not (new_mask == mask).all():
+        raise Exception("the mask has not been fully cleaned!")
+    rows_h4x, cols_h4x, data_h4x, rows_h4y, cols_h4y, data_h4y = diff_4th_operator_dpsi_reg_numba_func(mask)
+
+    n_unmasked = np.count_nonzero(~mask)
+    H4x = csr_matrix((data_h4x, (rows_h4x, cols_h4x)), shape=(n_unmasked, n_unmasked))
+    H4y = csr_matrix((data_h4y, (rows_h4y, cols_h4y)), shape=(n_unmasked, n_unmasked))
+
+    if return_H:
+        return H4x.T @ H4x + H4y.T @ H4y, H4x, H4y
+    else:
+        return H4x.T @ H4x + H4y.T @ H4y

@@ -36,8 +36,8 @@ class FitDpsiImaging:
             for key, value in preloads.items():
                 setattr(self, key, value)
         
-        mask = al.Mask2D(mask=self.pair_dpsi_data_obj.mask_data, pixel_scales=self.masked_imaging.pixel_scales)
-        self.masked_imaging.apply_mask(mask=mask)
+        # mask = al.Mask2D(mask=self.pair_dpsi_data_obj.mask_data, pixel_scales=self.masked_imaging.pixel_scales)
+        # self.masked_imaging.apply_mask(mask=mask)
 
 
     @property
