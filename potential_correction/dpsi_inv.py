@@ -4,7 +4,7 @@ import numpy as np
 from potential_correction import dpsi_mesh 
 from autoarray.inversion.regularization.abstract import AbstractRegularization
 import potential_correction.util as pul
-from potential_correction.covariance_reg import CurvatureRegularizationDpsi, CovarianceRegularization
+from potential_correction.covariance_reg import CurvatureRegularizationDpsi, CovarianceRegularization, FourthOrderRegularizationDpsi
 
 
 class DpsiPixelization:
@@ -78,7 +78,7 @@ class FitDpsiImaging:
         if not hasattr(self, "dpsi_points"):
             self.dpsi_points = np.vstack([self.pair_dpsi_data_obj.ygrid_dpsi_1d, self.pair_dpsi_data_obj.xgrid_dpsi_1d]).T
         if not hasattr(self, "dpsi_reg_mat"):
-            if isinstance(self.dpsi_pixelization.regularization, CurvatureRegularizationDpsi):
+            if isinstance(self.dpsi_pixelization.regularization, CurvatureRegularizationDpsi) or isinstance(self.dpsi_pixelization.regularization, FourthOrderRegularizationDpsi):
                 self.dpsi_reg_mat = self.dpsi_pixelization.regularization.regularization_matrix_from(
                     self.pair_dpsi_data_obj.mask_dpsi, 
                 )

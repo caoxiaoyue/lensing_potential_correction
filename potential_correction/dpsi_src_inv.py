@@ -11,7 +11,7 @@ import os
 from potential_correction.visualize import show_fit_dpsi_src
 from scipy.interpolate import RBFInterpolator
 import GPy
-from potential_correction.covariance_reg import CurvatureRegularizationDpsi, CovarianceRegularization
+from potential_correction.covariance_reg import CurvatureRegularizationDpsi, CovarianceRegularization, FourthOrderRegularizationDpsi
 
 
 class SrcFactory(ABC):
@@ -212,7 +212,7 @@ class FitDpsiSrcImaging:
         if not hasattr(self, "dpsi_points"):
             self.dpsi_points = np.vstack([self.pair_dpsi_data_obj.ygrid_dpsi_1d, self.pair_dpsi_data_obj.xgrid_dpsi_1d]).T
         if not hasattr(self, "dpsi_reg_mat"):
-            if isinstance(self.dpsi_pixelization.regularization, CurvatureRegularizationDpsi):
+            if isinstance(self.dpsi_pixelization.regularization, CurvatureRegularizationDpsi) or isinstance(self.dpsi_pixelization.regularization, FourthOrderRegularizationDpsi):
                 self.dpsi_reg_mat = self.dpsi_pixelization.regularization.regularization_matrix_from(
                     self.pair_dpsi_data_obj.mask_dpsi, 
                 )

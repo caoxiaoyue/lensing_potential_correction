@@ -94,3 +94,21 @@ class CurvatureRegularizationDpsi(AbstractRegularization):
         mask: the mask that defines the pixels that are modeled
         """
         return self.coefficient * pul.dpsi_curvature_reg_matrix_from(mask)
+    
+
+
+class FourthOrderRegularizationDpsi(AbstractRegularization):
+    def __init__(self, coefficient: float = 1.0):
+        self.coefficient = coefficient
+
+
+    def regularization_parameters_from(self, linear_obj: LinearObj) -> np.ndarray:
+        return self.coefficient * np.ones(linear_obj.params)
+    
+
+    @abstractmethod
+    def regularization_matrix_from(self, mask) -> np.ndarray:
+        """
+        mask: the mask that defines the pixels that are modeled
+        """
+        return self.coefficient * pul.dpsi_4th_reg_matrix_from(mask)
