@@ -906,7 +906,7 @@ def log_det_mat(square_matrix, sparse=False):
             pass
 
     try:
-        if sparse: square_matrix = square_matrix.toarray()
+        if not isinstance(square_matrix, np.ndarray): square_matrix = square_matrix.toarray()
         return 2.0 * np.sum(
             np.log(
                 np.diag(np.linalg.cholesky(square_matrix))

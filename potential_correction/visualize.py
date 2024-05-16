@@ -5,6 +5,10 @@ from potential_correction.dpsi_inv import FitDpsiImaging
 import autolens as al
 from scipy.interpolate import griddata
 import os
+from scipy.spatial import Voronoi, voronoi_plot_2d
+import matplotlib as mpl
+import matplotlib.cm as cm
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
 def imshow_masked_data(data_1d, mask_2d, dpix=None, ax=None, **kargs):
@@ -176,7 +180,7 @@ def compare_fit_with_true_perturber(fit: FitDpsiImaging, true_perturber: al.Gala
     plt.close()
 
 
-def show_source_reconstruction(
+def show_image_irregular_interpolate(
     points, 
     values, 
     ax=None, 
@@ -204,7 +208,45 @@ def show_source_reconstruction(
     plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
 
-def show_fit_source(fit, output='result.png'):
+def show_image_irregular(points,values,ax=None, enlarge_factor=1.1, title='Source', cmap='jet', minima=None, maxima=None):
+    """
+    https://stackoverflow.com/questions/56904546/how-to-add-information-to-a-scipy-spatial-voronoi-plot
+    """
+    points = np.asarray(points)
+    points  = points[:, ::-1] #change to numpy/scipy api format -- [(x1,y2), (x2,y2),...] order
+    
+    half_width = max(np.abs(points.min()), np.abs(points.max()))
+    half_width *= enlarge_factor
+
+    # https://stackoverflow.com/questions/20515554/colorize-voronoi-diagram
+    points = np.append(points, [[999,999], [-999,999], [999,-999], [-999,-999]], axis=0)
+    vor = Voronoi(points)
+    # find min/max values for normalization
+    if minima is None:
+        minima = min(values)
+    if maxima is None:
+        maxima = max(values)
+    # normalize chosen colormap
+    norm = mpl.colors.Normalize(vmin=minima, vmax=maxima, clip=True)
+    mapper = cm.ScalarMappable(norm=norm, cmap=cmap)
+    mapper.set_array([])
+    # plot Voronoi diagram, and fill finite regions with color mapped from speed value
+    voronoi_plot_2d(vor,ax=ax, show_points=False, show_vertices=False, line_width=0.05, point_size=1, line_colors='k', line_alpha=0.2)
+    for r in range(len(vor.point_region)):
+        region = vor.regions[vor.point_region[r]]  
+        if not -1 in region:
+            polygon = [vor.vertices[i] for i in region] #voronoi region coordinates
+            ax.fill(*zip(*polygon), color=mapper.to_rgba(values[r]))
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    plt.colorbar(mapper, cax=cax)
+    ax.set_xlim(-half_width, half_width)
+    ax.set_ylim(-half_width, half_width)
+    ax.set_aspect('equal', adjustable='box')
+    ax.set_title(title)
+
+
+def show_fit_source(fit, output='result.png', interpolate=True):
     """
     fit is a FitSrcImaging instance
     see `from potential_correction.src_inv import FitSrcImaging`
@@ -237,7 +279,10 @@ def show_fit_source(fit, output='result.png'):
 
     plt.subplot(224)
     ax = plt.gca()
-    show_source_reconstruction(fit.mapper.mapper_grids.source_plane_mesh_grid, fit.src_slim, ax=ax, enlarge_factor=1.1, npixels=100, cmap='jet')
+    if interpolate:
+        show_image_irregular_interpolate(fit.mapper.mapper_grids.source_plane_mesh_grid, fit.src_slim, ax=ax, enlarge_factor=1.1, npixels=100, cmap='jet')
+    else:
+        show_image_irregular(fit.mapper.mapper_grids.source_plane_mesh_grid, fit.src_slim, enlarge_factor=1.1, cmap='jet', ax=ax, title='Source')
     ax.set_title('Source')
 
     plt.tight_layout()
@@ -245,7 +290,7 @@ def show_fit_source(fit, output='result.png'):
     plt.close()
 
 
-def show_fit_source_al(fit, output='result.png'):
+def show_fit_source_al(fit, output='result.png', show_src_grid=True, interpolate=True):
     """
     fit is a FitImaging instance
     """
@@ -258,6 +303,8 @@ def show_fit_source_al(fit, output='result.png'):
     limit = fit.imaging.data.shape_native[0] * 0.5 * dpix
     extent = [-limit, limit, -limit, limit]
     myargs_data['extent'] = extent
+    image_plane_mesh_grid = fit.inversion.linear_obj_list[0].image_plane_mesh_grid
+    source_plane_mesh_grid = fit.inversion.linear_obj_list[0].source_plane_mesh_grid
 
     plt.subplot(221)
     ax = plt.gca()
@@ -267,6 +314,7 @@ def show_fit_source_al(fit, output='result.png'):
     plt.subplot(222)
     ax = plt.gca()
     imshow_masked_data(fit.inversion.mapped_reconstructed_image, fit.imaging.mask, dpix=dpix, ax=ax, **myargs_data)
+    if show_src_grid: ax.scatter(image_plane_mesh_grid[:, 1], image_plane_mesh_grid[:, 0], c='black', s=0.5, alpha=0.5)
     ax.set_title('Model')
 
     norm_residual_slim = (fit.imaging.data-fit.inversion.mapped_reconstructed_image)/fit.imaging.noise_map
@@ -275,10 +323,13 @@ def show_fit_source_al(fit, output='result.png'):
     imshow_masked_data(norm_residual_slim, fit.imaging.mask, dpix=dpix, ax=ax, **myargs_data)
     ax.set_title('Norm Residual')
 
-    mapper = fit.inversion.linear_obj_list[0]
     plt.subplot(224)
     ax = plt.gca()
-    show_source_reconstruction(mapper.mapper_grids.source_plane_mesh_grid, fit.inversion.reconstruction, ax=ax, enlarge_factor=1.1, npixels=100, cmap='jet')
+    if interpolate:
+        show_image_irregular_interpolate(source_plane_mesh_grid, fit.inversion.reconstruction, ax=ax, enlarge_factor=1.1, npixels=100, cmap='jet')
+    else:
+        show_image_irregular(source_plane_mesh_grid, fit.inversion.reconstruction, enlarge_factor=1.1, cmap='jet', ax=ax, title='Source')
+    if show_src_grid: ax.scatter(source_plane_mesh_grid[:, 1], source_plane_mesh_grid[:, 0], c='black', s=0.1, alpha=0.5)
     ax.set_title('Source')
 
     plt.tight_layout()
@@ -286,7 +337,7 @@ def show_fit_source_al(fit, output='result.png'):
     plt.close()
 
 
-def show_fit_dpsi_src(fit, output='result.png'):
+def show_fit_dpsi_src(fit, output='result.png', show_src_grid=True, interpolate=True):
     """
     fit is a FitDpsiSrcImaging instance
     see `from potential_correction.dpsi_src_inv import FitDpsiSrcImaging`
@@ -306,6 +357,8 @@ def show_fit_dpsi_src(fit, output='result.png'):
         fit.pair_dpsi_data_obj.ygrid_data_1d.max(),
     ]
     myargs_dpsi = copy.deepcopy(myargs_data)
+    image_plane_mesh_grid = fit.src_mapper.image_plane_mesh_grid
+    source_plane_mesh_grid = fit.src_mapper.source_plane_mesh_grid
 
     #data, noise, snr// model, residual, norm_residual// dpsi_map, dkappa_map, source_reconstruction
     plt.subplot(331)
@@ -333,6 +386,7 @@ def show_fit_dpsi_src(fit, output='result.png'):
     plt.subplot(334)
     ax = plt.gca()
     imshow_masked_data(fit.model_image_slim, fit.masked_imaging.mask, ax=ax, **myargs_data)
+    if show_src_grid: ax.scatter(image_plane_mesh_grid[:, 1], image_plane_mesh_grid[:, 0], c='black', s=0.5, alpha=0.5)
     ax.set_title('Model')
     ax.set_xlim(*xlimit)
     ax.set_ylim(*ylimit)
@@ -374,7 +428,11 @@ def show_fit_dpsi_src(fit, output='result.png'):
     src_slim = fit.src_dpsi_slim[0:n_src_pixels]
     plt.subplot(339)
     ax = plt.gca()
-    show_source_reconstruction(fit.src_mapper.mapper_grids.source_plane_mesh_grid, src_slim, ax=ax, enlarge_factor=1.1, npixels=100, cmap='jet')
+    if interpolate:
+        show_image_irregular_interpolate(source_plane_mesh_grid, src_slim, ax=ax, enlarge_factor=1.1, npixels=100, cmap='jet')
+    else:
+        show_image_irregular(source_plane_mesh_grid, src_slim, enlarge_factor=1.1, cmap='jet', ax=ax, title='Source')
+    if show_src_grid: ax.scatter(source_plane_mesh_grid[:, 1], source_plane_mesh_grid[:, 0], c='black', s=0.1, alpha=0.5)
     ax.set_title('Source')
 
     plt.tight_layout()

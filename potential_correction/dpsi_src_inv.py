@@ -12,6 +12,11 @@ from potential_correction.visualize import show_fit_dpsi_src
 from scipy.interpolate import RBFInterpolator
 import GPy
 from potential_correction.covariance_reg import CurvatureRegularizationDpsi, CovarianceRegularization, FourthOrderRegularizationDpsi
+from typing import Dict, List, Optional
+import autoarray as aa
+from autoarray import exc
+import traceback
+import pickle
 
 
 class SrcFactory(ABC):
@@ -124,6 +129,8 @@ class FitDpsiSrcImaging:
         source_start: SrcFactory,
         dpsi_pixelization: DpsiPixelization, #mesh + regularization properties
         src_pixelization: al.Pixelization,
+        adapt_image: Optional[al.Array2D] = None,
+        settings_inversion: Optional[aa.SettingsInversion] = None,
         preloads: dict = None,
     ):
         self.masked_imaging = masked_imaging #autolens masked imaging object
@@ -132,7 +139,15 @@ class FitDpsiSrcImaging:
         self.source_start = source_start
         self.dpsi_pixelization = dpsi_pixelization
         self.src_pixelization = src_pixelization
-
+        self.adapt_image = adapt_image
+        if settings_inversion is None:
+            self.settings_inversion = al.SettingsInversion(
+                use_w_tilde=False, 
+                use_positive_only_solver=True,
+                relocate_pix_border=True,
+            )
+        else:
+            self.settings_inversion = settings_inversion
         if preloads is not None:
             for key, value in preloads.items():
                 setattr(self, key, value)
@@ -143,16 +158,24 @@ class FitDpsiSrcImaging:
 
     def do_source_inversion(self):
         source_galaxy = al.Galaxy(redshift=1.0, pixelization=self.src_pixelization)
+
+        if self.adapt_image is not None:
+            self.adapt_images = al.AdaptImages(galaxy_image_dict={source_galaxy: self.adapt_image})
+        else:
+            self.adapt_images = None
+
         tracer = al.Tracer.from_galaxies(galaxies=[self.lens_start, source_galaxy])
 
-        self.src_fit = FitSrcImaging(
-            masked_imaging=self.masked_imaging, 
+        self.src_fit = al.FitImaging(
+            dataset=self.masked_imaging, 
             tracer=tracer,
+            adapt_images=self.adapt_images,
+            settings_inversion=self.settings_inversion,
         )
 
-        self.src_mapper = self.src_fit.construct_mapper()
-        self.src_map_mat = self.src_fit.mapping_matrix_from(self.src_mapper)
-        self.src_reg_mat = self.src_fit.regularization_matrix_from(self.src_mapper)
+        self.src_mapper = self.src_fit.inversion.linear_obj_list[0] ##Note, not very elegant, but works for now
+        self.src_map_mat = self.src_fit.inversion.operated_mapping_matrix
+        self.src_reg_mat = self.src_fit.inversion.regularization_matrix
 
 
     @property
@@ -297,6 +320,8 @@ class FitDpsiSrcImaging:
         #log det cuverd reg term
         sign, logval = np.linalg.slogdet(self.curvature_regularization_matrix)
         if sign != 1:
+            # with open("err_fit_imaging.pkl", "wb") as f:
+            #     pickle.dump(self, f)
             raise Exception(f"The curve reg matrix is not positive definite.")
         self.log_det_curve_reg_term = logval * (-0.5)
 
@@ -340,12 +365,27 @@ class DpsiSrcInvAnalysis(af.Analysis):
             anchor_points: np.ndarray,
             lens_start: al.Galaxy,
             source_start: SrcFactory,
+            adapt_image: Optional[al.Array2D] = None,
+            settings_inversion: Optional[aa.SettingsInversion] = None,
             preloads: dict = None,
         ):
         self.masked_imaging = masked_imaging
         self.anchor_points = anchor_points
         self.lens_start = lens_start
         self.source_start = source_start
+        self.adapt_image = adapt_image
+        if settings_inversion is None:
+            self.settings_inversion = al.SettingsInversion(
+                use_w_tilde=False, 
+                use_positive_only_solver=True,
+                relocate_pix_border=True,
+                image_mesh_min_mesh_pixels_per_pixel=3,
+                image_mesh_min_mesh_number=5,
+                image_mesh_adapt_background_percent_threshold=0.1,
+                image_mesh_adapt_background_percent_check=0.8,
+            )
+        else:
+            self.settings_inversion = settings_inversion
         self.preloads = preloads
 
 
@@ -357,9 +397,16 @@ class DpsiSrcInvAnalysis(af.Analysis):
             source_start=self.source_start,
             dpsi_pixelization=instance.dpsi_pixelization,
             src_pixelization=instance.src_pixelization,
+            adapt_image=self.adapt_image,
+            settings_inversion=self.settings_inversion,
             preloads=self.preloads,
         )
-        log_ev = fit.log_evidence
+        try:
+            log_ev = fit.log_evidence
+        except exc.InversionException as e:
+            exception_info = traceback.format_exc()
+            print(exception_info)
+            return -1e8
         return log_ev
     
 
@@ -371,6 +418,9 @@ class DpsiSrcInvAnalysis(af.Analysis):
             source_start=self.source_start,
             dpsi_pixelization=instance.dpsi_pixelization, #mesh + regularization properties
             src_pixelization=instance.src_pixelization,
+            adapt_image=self.adapt_image,
+            settings_inversion=self.settings_inversion,
+            preloads=self.preloads,
         )
         fit.log_evidence
 
