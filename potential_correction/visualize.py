@@ -527,3 +527,101 @@ def check_grf_reconstruction(fit, true_grf, output="show"):
         fig.savefig(output, bbox_inches='tight')
         plt.close(fig)
 
+
+def show_fit_dpsi_src_err(fit, output='./result.png', show_src_grid=True, interpolate=True, n_solutions=10):
+    """
+    fit is a FitDpsiSrcImaging instance
+    see `from potential_correction.dpsi_src_inv import FitDpsiSrcImaging`
+    """
+    solutions = fit.draw_random_solutions(n_solutions)
+    model_images = np.zeros((n_solutions, fit.masked_imaging.data.shape[0]))
+    norm_residual_images = np.zeros_like(model_images)
+    n_src_pixels = fit.src_regularization_matrix.shape[0]
+    n_dpsi_pixels = fit.dpsi_regularization_matrix.shape[0]
+    dpsi_images = np.zeros((n_solutions, n_dpsi_pixels))
+    dkappa_images = np.zeros_like(dpsi_images)
+    source_images = np.zeros((n_solutions, n_src_pixels))
+    for i in range(n_solutions):
+        solution = np.ravel(solutions[i, :])
+        model_images[i] = fit.mapping_matrix @ solution
+        norm_residual_images[i] = (fit.masked_imaging.data - model_images[i])/fit.masked_imaging.noise_map
+        dpsi_images[i] = solution[n_src_pixels:]
+        source_images[i] = solution[0:n_src_pixels]
+        dkappa_images[i] = fit.pair_dpsi_data_obj.hamiltonian_dpsi @ dpsi_images[i]
+
+    #model, norm_residual, dpsi_map, dkappa_map, source_reconstruction
+    width = 5*5+4
+    height = 5*n_solutions+n_solutions-1
+    fig, axes = plt.subplots(n_solutions, 5, figsize=(width, height))
+    cmap = copy.copy(plt.get_cmap('jet'))
+    cmap.set_bad(color='white')
+    myargs_data = {'origin':'upper'}
+    myargs_data['cmap'] = cmap
+    myargs_data['extent'] = copy.copy(fit.pair_dpsi_data_obj.data_bound)
+    xlimit = [
+        fit.pair_dpsi_data_obj.xgrid_data_1d.min(),
+        fit.pair_dpsi_data_obj.xgrid_data_1d.max(),
+    ]
+    ylimit = [
+        fit.pair_dpsi_data_obj.ygrid_data_1d.min(),
+        fit.pair_dpsi_data_obj.ygrid_data_1d.max(),
+    ]
+    myargs_dpsi = copy.deepcopy(myargs_data)
+    image_plane_mesh_grid = fit.src_mapper.image_plane_mesh_grid
+    source_plane_mesh_grid = fit.src_mapper.source_plane_mesh_grid
+
+    #model, norm_residual, dpsi_map, dkappa_map, source_reconstruction
+    j = 1
+    for i in range(n_solutions):
+        #model image
+        ax = axes[i, 0]
+        imshow_masked_data(model_images[i], fit.masked_imaging.mask, ax=ax, **myargs_data)
+        if show_src_grid: ax.scatter(image_plane_mesh_grid[:, 1], image_plane_mesh_grid[:, 0], c='black', s=0.5, alpha=0.5)
+        ax.set_title('Model')
+        ax.set_xlim(*xlimit)
+        ax.set_ylim(*ylimit)
+        j += 1
+
+        #norm residual
+        ax = axes[i, 1]
+        imshow_masked_data(norm_residual_images[i], fit.masked_imaging.mask, ax=ax, **myargs_data)
+        ax.set_title('Norm Residual')
+        ax.set_xlim(*xlimit)
+        ax.set_ylim(*ylimit)
+        j += 1
+
+        #dpsi_map
+        ax = axes[i, 2]
+        imshow_masked_data(dpsi_images[i], fit.pair_dpsi_data_obj.mask_dpsi, ax=ax, **myargs_dpsi)
+        ax.plot(fit.anchor_points[:, 1], fit.anchor_points[:, 0], 'rx')
+        ax.set_title('Dpsi Map')
+        ax.set_xlim(*xlimit)
+        ax.set_ylim(*ylimit)
+        j += 1
+
+        #dkappa_map
+        ax = axes[i, 3]
+        imshow_masked_data(dkappa_images[i], fit.pair_dpsi_data_obj.mask_dpsi, ax=ax, **myargs_data)
+        ax.set_title('Dkappa Map')
+        ax.set_xlim(*xlimit)
+        ax.set_ylim(*ylimit)
+        j += 1
+
+        #source_reconstruction
+        ax = axes[i, 4]
+        if interpolate:
+            show_image_irregular_interpolate(source_plane_mesh_grid, source_images[i], ax=ax, enlarge_factor=1.1, npixels=100, cmap='jet')
+        else:
+            show_image_irregular(source_plane_mesh_grid, source_images[i], enlarge_factor=1.1, cmap='jet', ax=ax, title='Source')
+        if show_src_grid: ax.scatter(source_plane_mesh_grid[:, 1], source_plane_mesh_grid[:, 0], c='black', s=0.1, alpha=0.5)
+        ax.set_title('Source')
+        j += 1
+
+    plt.tight_layout()
+
+    if output == "show":
+        return fig
+    else:
+        os.makedirs(os.path.dirname(output), exist_ok=True)
+        fig.savefig(output, bbox_inches='tight')
+        plt.close(fig)

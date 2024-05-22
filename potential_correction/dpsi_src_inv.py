@@ -175,6 +175,7 @@ class FitDpsiSrcImaging:
 
         self.src_mapper = self.src_fit.inversion.linear_obj_list[0] ##Note, not very elegant, but works for now
         self.src_map_mat = self.src_fit.inversion.operated_mapping_matrix
+        # self.src_reg_mat = 0.5 * (self.src_fit.inversion.regularization_matrix + self.src_fit.inversion.regularization_matrix.T) #src_reg_mat may be asymmetric due to numerical errors, make sure it is symmetric
         self.src_reg_mat = self.src_fit.inversion.regularization_matrix
 
 
@@ -241,6 +242,7 @@ class FitDpsiSrcImaging:
                 )
             elif isinstance(self.dpsi_pixelization.regularization, CovarianceRegularization):
                 self.dpsi_reg_mat = self.dpsi_pixelization.regularization.regularization_matrix_from(self.dpsi_points)
+        # self.dpsi_reg_mat = 0.5 * (self.dpsi_reg_mat + self.dpsi_reg_mat.T) #dpsi_reg_mat may be asymmetric due to numerical errors, make sure it is symmetric
         return self.dpsi_reg_mat
     
     
@@ -356,6 +358,22 @@ class FitDpsiSrcImaging:
 
         #evidence
         return self.noise_term + self.log_det_curve_reg_term + self.log_det_reg_term + self.reg_cov_term + self.chi2_term
+    
+
+    def draw_random_solutions(self, n_solutions=300):
+        """
+        draw the dpsi/source solutions that fit can the data within the level permitted by the noise and regularizatoin levels
+        """
+        mean, cov_mat = self.solve_src_dpsi(return_error=True)
+        # cov_mat = 0.5 * (cov_mat + cov_mat.T) #cov_mat may be asymmetric due to numerical errors, make sure it is symmetric
+        cov_mat = cov_mat + 1e-8 * np.eye(cov_mat.shape[0])
+        L = np.linalg.cholesky(cov_mat)
+    
+        r_samps = np.random.randn(n_solutions, len(mean))
+        # Compute solution samples
+        solutions = mean + np.dot(L, r_samps.T).T
+
+        return solutions
 
 
 class DpsiSrcInvAnalysis(af.Analysis):
