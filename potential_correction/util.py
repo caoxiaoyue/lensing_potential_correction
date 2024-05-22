@@ -741,27 +741,43 @@ def gradient_points_from(points: np.ndarray, cross_size=0.001):
     n_points = len(points)
     grad_points = np.zeros(shape=(n_points*4, 2))
     for i in range(n_points):
-        #left endpoint
-        grad_points[4*i,0] = points[i,0] #y
-        grad_points[4*i,1] = points[i,1] - cross_size #x
-        #right endpoint
-        grad_points[4*i+1,0] = points[i,0] #y
-        grad_points[4*i+1,1] = points[i,1] + cross_size #x
         #top endpoint
-        grad_points[4*i+3,0] = points[i,0] + cross_size #y
-        grad_points[4*i+3,1] = points[i,1] #x
+        grad_points[4*i,0] = points[i,0] + cross_size #y
+        grad_points[4*i,1] = points[i,1] #x
         #bottom endpoint
-        grad_points[4*i+2,0] = points[i,0] - cross_size #y
-        grad_points[4*i+2,1] = points[i,1] #x
+        grad_points[4*i+1,0] = points[i,0] - cross_size #y
+        grad_points[4*i+1,1] = points[i,1] #x
+        #right endpoint
+        grad_points[4*i+2,0] = points[i,0] #y
+        grad_points[4*i+2,1] = points[i,1] + cross_size #x
+        #left endpoint
+        grad_points[4*i+3,0] = points[i,0] #y
+        grad_points[4*i+3,1] = points[i,1] - cross_size #x
     
     return grad_points
 
 
+# @numba.njit(cache=False, parallel=False)
+# def source_gradient_from(values_on_gradient_points: np.ndarray, cross_size=0.001):
+#     values_on_gradient_points = values_on_gradient_points.reshape((-1, 4))
+#     x_diff = (values_on_gradient_points[:, 1] - values_on_gradient_points[:, 0])/(2.0*cross_size) 
+#     y_diff = (values_on_gradient_points[:, 3] - values_on_gradient_points[:, 2])/(2.0*cross_size)
+#     return np.vstack((y_diff, x_diff)).T
+
+
 @numba.njit(cache=False, parallel=False)
-def source_gradient_from(values_on_gradient_points: np.ndarray, cross_size=0.001):
-    values_on_gradient_points = values_on_gradient_points.reshape((-1, 4))
-    x_diff = (values_on_gradient_points[:, 1] - values_on_gradient_points[:, 0])/(2.0*cross_size) 
-    y_diff = (values_on_gradient_points[:, 3] - values_on_gradient_points[:, 2])/(2.0*cross_size)
+def source_gradient_from(values_on_gradient_points: np.ndarray, gradient_points: np.ndarray):
+    n_pixel = int(len(values_on_gradient_points)/4)
+    
+    x_diff = np.zeros(n_pixel, dtype='float')
+    y_diff = np.zeros(n_pixel, dtype='float')
+
+    for i in range(n_pixel):
+        step_x = gradient_points[4*i+2,1] - gradient_points[4*i+3,1]
+        step_y = gradient_points[4*i,0] - gradient_points[4*i+1,0]
+        y_diff[i] = (values_on_gradient_points[4*i] - values_on_gradient_points[4*i+1])/step_y
+        x_diff[i] = (values_on_gradient_points[4*i+2] - values_on_gradient_points[4*i+3])/step_x
+
     return np.vstack((y_diff, x_diff)).T
 
 

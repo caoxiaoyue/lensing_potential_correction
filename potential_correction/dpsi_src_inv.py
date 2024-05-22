@@ -14,6 +14,7 @@ import GPy
 from potential_correction.covariance_reg import CurvatureRegularizationDpsi, CovarianceRegularization, FourthOrderRegularizationDpsi
 from typing import Dict, List, Optional
 import autoarray as aa
+from autoarray.util.nn import nn_py
 from autoarray import exc
 import traceback
 import pickle
@@ -36,7 +37,7 @@ class SrcFactory(ABC):
         points = np.vstack((ygrid.flatten(), xgrid.flatten())).T
         grad_points = pul.gradient_points_from(points, cross_size=cross_size)
         values_at_grad_points = self.eval_func(grad_points[:, 1], grad_points[:, 0])
-        src_grad_values = pul.source_gradient_from(values_at_grad_points, cross_size)
+        src_grad_values = pul.source_gradient_from(values_at_grad_points, grad_points)
         return src_grad_values.reshape(*origin_shape, 2)
 
 
@@ -63,10 +64,12 @@ class PixSrcFactory(SrcFactory):
             return itp_vals.reshape(xgrid.shape)
 
 
+
 class PixSrcFactoryITP(SrcFactory):
     def __init__(self, points: np.ndarray, values: np.ndarray):
         self.points = points # (n_points, 2), in autolens [(y1,x1), (y2,x2),...] order
         self.values = values 
+        self.vor_mesh = aa.Mesh2DVoronoi(values=self.points)
 
 
     def eval_func(self, xgrid: np.ndarray, ygrid: np.ndarray):
@@ -77,13 +80,62 @@ class PixSrcFactoryITP(SrcFactory):
         return self.interp_func(xgrid, ygrid)
         
 
-    def eval_grad(self, xgrid: np.ndarray, ygrid: np.ndarray, cross_size=0.001):
-        if not hasattr(self, "interp_grad_func"):
+    def eval_grad(self, xgrid: np.ndarray, ygrid: np.ndarray, cross_size=None):
+        if cross_size is None:
+            grad_points = self.vor_mesh.split_cross
+        else:
             grad_points = pul.gradient_points_from(self.points, cross_size=cross_size)
-            values_at_grad_points = self.eval_func(grad_points[:, 1], grad_points[:, 0])
-            src_grad_values = pul.source_gradient_from(values_at_grad_points, cross_size)
+        values_at_grad_points = self.eval_func(grad_points[:, 1], grad_points[:, 0])
+        if not hasattr(self, "interp_grad_func"):
+            src_grad_values = pul.source_gradient_from(values_at_grad_points, grad_points)
             self.interp_grad_func = pul.LinearNDInterpolatorExt(self.tri, src_grad_values)
         return self.interp_grad_func(xgrid, ygrid)
+
+
+
+class PixSrcFactoryNN(SrcFactory):
+    def __init__(self, points: np.ndarray, values: np.ndarray):
+        self.points = points # (n_points, 2), in autolens [(y1,x1), (y2,x2),...] order
+        self.values = values 
+        self.vor_mesh = aa.Mesh2DVoronoi(values=self.points)
+
+
+    def eval_func(self, xgrid: np.ndarray, ygrid: np.ndarray):
+        itp_values = nn_py.natural_interpolation(
+            self.points[:, 1],
+            self.points[:, 0], 
+            self.values, 
+            xgrid.ravel(), 
+            ygrid.ravel(),
+        )
+        return itp_values.reshape(xgrid.shape)
+        
+
+    def eval_grad(self, xgrid: np.ndarray, ygrid: np.ndarray, cross_size=None):
+        if cross_size is None:
+            grad_points = self.vor_mesh.split_cross
+        else:
+            grad_points = pul.gradient_points_from(self.points, cross_size=cross_size)
+        values_at_grad_points = self.eval_func(grad_points[:, 1], grad_points[:, 0])
+        if not hasattr(self, "grad_values"):
+            self.grad_values = pul.source_gradient_from(values_at_grad_points, grad_points)
+        itp_values_y = nn_py.natural_interpolation(
+            self.points[:, 1],
+            self.points[:, 0], 
+            self.grad_values[:, 0], 
+            xgrid.ravel(), 
+            ygrid.ravel(),
+        )
+        itp_values_x = nn_py.natural_interpolation(
+            self.points[:, 1],
+            self.points[:, 0], 
+            self.grad_values[:, 1], 
+            xgrid.ravel(), 
+            ygrid.ravel(),
+        )
+        itp_values = np.vstack([itp_values_y, itp_values_x]).T
+        return itp_values
+
 
 
 class PixSrcFactoryGPR(SrcFactory):
