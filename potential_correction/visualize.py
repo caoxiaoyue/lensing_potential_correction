@@ -246,50 +246,6 @@ def show_image_irregular(points,values,ax=None, enlarge_factor=1.1, title='Sourc
     ax.set_title(title)
 
 
-def show_fit_source(fit, output='result.png', interpolate=True):
-    """
-    fit is a FitSrcImaging instance
-    see `from potential_correction.src_inv import FitSrcImaging`
-    """
-    plt.figure(figsize=(10, 10))
-    cmap = copy.copy(plt.get_cmap('jet'))
-    cmap.set_bad(color='white')
-    myargs_data = {'origin':'upper'}
-    myargs_data['cmap'] = cmap
-    dpix = fit.masked_imaging.pixel_scales[0]
-    limit = fit.masked_imaging.data.shape_native[0] * 0.5 * dpix
-    extent = [-limit, limit, -limit, limit]
-    myargs_data['extent'] = extent
-
-    plt.subplot(221)
-    ax = plt.gca()
-    imshow_masked_data(fit.masked_imaging.data, fit.masked_imaging.mask, dpix=dpix, ax=ax, **myargs_data)
-    ax.set_title('Data')
-
-    plt.subplot(222)
-    ax = plt.gca()
-    imshow_masked_data(fit.model_image_slim, fit.masked_imaging.mask, dpix=dpix, ax=ax, **myargs_data)
-    ax.set_title('Model')
-
-    norm_residual_slim = (fit.masked_imaging.data-fit.model_image_slim)/fit.masked_imaging.noise_map
-    plt.subplot(223)
-    ax = plt.gca()
-    imshow_masked_data(norm_residual_slim, fit.masked_imaging.mask, dpix=dpix, ax=ax, **myargs_data)
-    ax.set_title('Norm Residual')
-
-    plt.subplot(224)
-    ax = plt.gca()
-    if interpolate:
-        show_image_irregular_interpolate(fit.mapper.mapper_grids.source_plane_mesh_grid, fit.src_slim, ax=ax, enlarge_factor=1.1, npixels=100, cmap='jet')
-    else:
-        show_image_irregular(fit.mapper.mapper_grids.source_plane_mesh_grid, fit.src_slim, enlarge_factor=1.1, cmap='jet', ax=ax, title='Source')
-    ax.set_title('Source')
-
-    plt.tight_layout()
-    plt.savefig(output, bbox_inches='tight')
-    plt.close()
-
-
 def show_fit_source_al(fit, output='result.png', show_src_grid=True, interpolate=True):
     """
     fit is a FitImaging instance

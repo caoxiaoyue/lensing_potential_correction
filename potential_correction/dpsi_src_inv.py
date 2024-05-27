@@ -3,7 +3,6 @@ import autolens as al
 import numpy as np
 import potential_correction.util as pul
 from potential_correction.dpsi_inv import DpsiPixelization
-from potential_correction.src_inv import FitSrcImaging
 from scipy.spatial import Delaunay
 from abc import ABC, abstractmethod
 from scipy.sparse import block_diag
