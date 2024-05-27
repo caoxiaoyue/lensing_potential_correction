@@ -35,7 +35,10 @@ class FitDpsiImaging:
         if preloads is not None:
             for key, value in preloads.items():
                 setattr(self, key, value)
-        
+
+        self.masked_imaging.apply_settings(
+            settings=al.SettingsImaging(sub_size=4, sub_size_pixelization=4)
+        )
         # mask = al.Mask2D(mask=self.pair_dpsi_data_obj.mask_data, pixel_scales=self.masked_imaging.pixel_scales)
         # self.masked_imaging.apply_mask(mask=mask)
 

@@ -204,6 +204,9 @@ class FitDpsiSrcImaging:
             for key, value in preloads.items():
                 setattr(self, key, value)
 
+        self.masked_imaging.apply_settings(
+            settings=al.SettingsImaging(sub_size=4, sub_size_pixelization=4)
+        )
         # mask = al.Mask2D(mask=self.pair_dpsi_data_obj.mask_data, pixel_scales=self.masked_imaging.pixel_scales)
         # self.masked_imaging.apply_mask(mask=mask)
 
@@ -249,7 +252,7 @@ class FitDpsiSrcImaging:
     @property
     def source_plane_data_grid(self):
         #Note!!!, we implictly assume that the single plane ray-tracing is used here 
-        return self.masked_imaging.grid - self.lens_start.deflections_yx_2d_from(self.masked_imaging.grid)
+        return self.masked_imaging.grid.binned.slim - self.lens_start.deflections_yx_2d_from(self.masked_imaging.grid.binned.slim)
     
 
     @property
