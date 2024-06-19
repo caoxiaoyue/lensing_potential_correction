@@ -6,6 +6,8 @@ from scipy.sparse import lil_matrix, csr_matrix, csc_matrix
 import scipy.special as sc
 import math
 from scipy.sparse.linalg import splu
+import multiprocess as mp
+import GPy
 
 
 @numba.njit(cache=False, parallel=False)
@@ -1543,3 +1545,56 @@ def dpsi_4th_reg_matrix_from(mask, return_H=False):
         return H4x.T @ H4x + H4y.T @ H4y, H4x, H4y
     else:
         return H4x.T @ H4x + H4y.T @ H4y
+
+
+def _extract_info_from(fit=None):
+    n_src_pixels = fit.src_regularization_matrix.shape[0]
+    mapping_matrix = fit.mapping_matrix
+    data = fit.masked_imaging.data
+    noise_map = fit.masked_imaging.noise_map
+    dpsi_points = fit.dpsi_points
+    hamiltonian_dpsi = fit.pair_dpsi_data_obj.hamiltonian_dpsi
+    return n_src_pixels, mapping_matrix, data, noise_map, dpsi_points, hamiltonian_dpsi
+
+
+def single_result_from(
+    n_src_pixels=None, 
+    mapping_matrix=None, 
+    data=None, 
+    noise_map=None, 
+    dpsi_points=None, 
+    hamiltonian_dpsi=None, 
+    solution=None
+):
+    ker = GPy.kern.Matern52(2, ARD=False)
+    model_image = mapping_matrix @ solution
+    norm_residual_image = (data - model_image)/noise_map
+    dpsi_image = solution[n_src_pixels:]
+    source_image = solution[0:n_src_pixels]
+    dpsi_points = dpsi_points
+    interp_func = GPy.models.GPRegression(np.fliplr(dpsi_points), dpsi_image.reshape(-1, 1), ker)
+    interp_func.optimize(optimizer="lbfgsb", messages=0, max_f_eval = 5000)
+    itp_mean, itp_sigma = interp_func.predict(np.fliplr(dpsi_points), full_cov=False, include_likelihood=False)
+    dkappa_image = hamiltonian_dpsi @ np.ravel(itp_mean)
+    # dkappa_image = hamiltonian_dpsi @ dpsi_image
+    return model_image, norm_residual_image, dpsi_image, source_image, dkappa_image
+
+
+def multiple_results_from(fit=None, solutions=None, n_cpus=1):
+    solutions = [np.ravel(solutions[i]) for i in range(solutions.shape[0])]
+    n_src_pixels, mapping_matrix, data, noise_map, dpsi_points, hamiltonian_dpsi = _extract_info_from(fit)
+    args = [(n_src_pixels, mapping_matrix, data, noise_map, dpsi_points, hamiltonian_dpsi, solution) for solution in solutions]
+    print('starting multiprocessing', 'total cpus', n_cpus, '/', mp.cpu_count())
+    pool = mp.Pool(processes=n_cpus)
+    results = pool.starmap(single_result_from, args)
+    pool.close()
+    print('multiprocessing done')
+    model_images = np.vstack([item[0] for item in results])
+    norm_residual_images = np.vstack([item[1] for item in results])
+    dpsi_images = np.vstack([item[2] for item in results])
+    source_images = np.vstack([item[3] for item in results])
+    dkappa_images = np.vstack([item[4] for item in results])
+    return model_images, norm_residual_images, dpsi_images, source_images, dkappa_images
+
+
+
