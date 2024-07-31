@@ -9,6 +9,7 @@ from scipy.spatial import Voronoi, voronoi_plot_2d
 import matplotlib as mpl
 import matplotlib.cm as cm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from potential_correction.util import multiple_results_from
 
 
 def imshow_masked_data(data_1d, mask_2d, dpix=None, ax=None, **kargs):
@@ -17,7 +18,12 @@ def imshow_masked_data(data_1d, mask_2d, dpix=None, ax=None, **kargs):
     data_2d_masked = np.ma.masked_array(data_2d, mask=mask_2d)
 
     #show data_2d with colorbar
-    im = ax.imshow(data_2d_masked, **kargs)
+    if 'extent' in kargs.keys():
+        extent = kargs.pop('extent')
+    else:
+        hw = mask_2d.shape[0] * dpix * 0.5
+        extent = [-hw, hw, -hw, hw]
+    im = ax.imshow(data_2d_masked, extent=extent, **kargs)
     plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
     if dpix is not None:
@@ -484,26 +490,35 @@ def check_grf_reconstruction(fit, true_grf, output="show"):
         plt.close(fig)
 
 
-def show_fit_dpsi_src_err(fit, output='./result.png', show_src_grid=True, interpolate=True, n_solutions=10):
+def show_fit_dpsi_src_err(fit, output='./result.png', show_src_grid=True, interpolate=True, n_solutions=10, n_cpus=1):
     """
     fit is a FitDpsiSrcImaging instance
     see `from potential_correction.dpsi_src_inv import FitDpsiSrcImaging`
     """
     solutions = fit.draw_random_solutions(n_solutions)
-    model_images = np.zeros((n_solutions, fit.masked_imaging.data.shape[0]))
-    norm_residual_images = np.zeros_like(model_images)
     n_src_pixels = fit.src_regularization_matrix.shape[0]
     n_dpsi_pixels = fit.dpsi_regularization_matrix.shape[0]
-    dpsi_images = np.zeros((n_solutions, n_dpsi_pixels))
-    dkappa_images = np.zeros_like(dpsi_images)
-    source_images = np.zeros((n_solutions, n_src_pixels))
-    for i in range(n_solutions):
-        solution = np.ravel(solutions[i, :])
-        model_images[i] = fit.mapping_matrix @ solution
-        norm_residual_images[i] = (fit.masked_imaging.data - model_images[i])/fit.masked_imaging.noise_map
-        dpsi_images[i] = solution[n_src_pixels:]
-        source_images[i] = solution[0:n_src_pixels]
-        dkappa_images[i] = fit.pair_dpsi_data_obj.hamiltonian_dpsi @ dpsi_images[i]
+
+    model_images, norm_residual_images, dpsi_images, source_images, dkappa_images = multiple_results_from(fit, solutions, n_cpus=n_cpus)
+
+    # model_images = np.zeros((n_solutions, fit.masked_imaging.data.shape[0]))
+    # norm_residual_images = np.zeros_like(model_images)
+    # dpsi_images = np.zeros((n_solutions, n_dpsi_pixels))
+    # dkappa_images = np.zeros_like(dpsi_images)
+    # source_images = np.zeros((n_solutions, n_src_pixels))
+    # for i in range(n_solutions):
+    #     solution = np.ravel(solutions[i, :])
+    #     model_images[i] = fit.mapping_matrix @ solution
+    #     norm_residual_images[i] = (fit.masked_imaging.data - model_images[i])/fit.masked_imaging.noise_map
+    #     dpsi_images[i] = solution[n_src_pixels:]
+    #     source_images[i] = solution[0:n_src_pixels]
+
+    #     dpsi_points = fit.dpsi_points
+    #     interp_func = GPy.models.GPRegression(np.fliplr(dpsi_points), dpsi_images[i].reshape(-1, 1), ker)
+    #     interp_func.optimize(optimizer="lbfgsb", messages=0, max_f_eval = 5000)
+    #     itp_mean, itp_sigma = interp_func.predict(np.fliplr(dpsi_points), full_cov=False, include_likelihood=False)
+
+    #     dkappa_images[i] = fit.pair_dpsi_data_obj.hamiltonian_dpsi @ np.ravel(itp_mean)
 
     #model, norm_residual, dpsi_map, dkappa_map, source_reconstruction
     width = 5*5+4
