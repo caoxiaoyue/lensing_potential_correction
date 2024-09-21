@@ -5,6 +5,8 @@ from potential_correction import dpsi_mesh
 from autoarray.inversion.regularization.abstract import AbstractRegularization
 import potential_correction.util as pul
 from potential_correction.covariance_reg import CurvatureRegularizationDpsi, CovarianceRegularization, FourthOrderRegularizationDpsi
+from typing import Dict, List, Optional
+from scipy.spatial import Delaunay
 
 
 class DpsiPixelization:
@@ -22,8 +24,8 @@ class FitDpsiImaging:
         masked_imaging: al.Imaging,
         image_residual: np.ndarray,
         source_gradient: np.ndarray,
-        anchor_points: np.ndarray,
         dpsi_pixelization: DpsiPixelization,
+        anchor_points: Optional[np.ndarray] = np.array([[(), ()], [(), ()]]),
         preloads: dict = None,
     ):
         self.masked_imaging = masked_imaging #autolens masked imaging object
@@ -36,7 +38,7 @@ class FitDpsiImaging:
             for key, value in preloads.items():
                 setattr(self, key, value)
 
-        self.masked_imaging.apply_settings(
+        self.masked_imaging = self.masked_imaging.apply_settings(
             settings=al.SettingsImaging(sub_size=4, sub_size_pixelization=4)
         )
         # mask = al.Mask2D(mask=self.pair_dpsi_data_obj.mask_data, pixel_scales=self.masked_imaging.pixel_scales)
@@ -167,6 +169,22 @@ class FitDpsiImaging:
 
         #evidence
         return self.noise_term + self.log_det_curve_reg_term + self.log_det_reg_term + self.reg_cov_term + self.chi2_term
+
+
+    @property
+    def rescaled_dpsi(self):
+        try:
+            if not hasattr(self, 'dpsi_at_anchors'):
+                tri = Delaunay(np.fliplr(self.dpsi_points)) #to [[x1,y1], [x2, y2] ...] order
+                self.dpsi_interpl = pul.LinearNDInterpolatorExt(tri, self.dpsi_slim)
+                self.dpsi_at_anchors = self.dpsi_interpl(self.anchor_points[:, 1], self.anchor_points[:, 0])
+                #Suyu's dpsi rescaling scheme --> avoid wandering source position + uncertain constant factor of lensing potential
+            ay, ax, c = pul.solve_dpsi_rescale_factor(self.anchor_points, self.dpsi_at_anchors)
+            dpsi_new = ay*self.anchor_points[:, 0] + ax*self.anchor_points[:, 1] + c + self.dpsi_slim
+            return dpsi_new, ay, ax, c
+        except:
+            return self.dpsi_slim, 0.0, 0.0, 0.0
+            
         
 
 # import time
@@ -176,7 +194,7 @@ class DpsiInvAnalysis(af.Analysis):
             masked_imaging: al.Imaging,
             image_residual: np.ndarray,
             source_gradient: np.ndarray,
-            anchor_points: np.ndarray,
+            anchor_points: Optional[np.ndarray] = np.array([[(), ()], [(), ()]]),
             preloads: dict = None,
         ):
         self.masked_imaging = masked_imaging

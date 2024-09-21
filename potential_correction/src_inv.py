@@ -2,7 +2,7 @@ import autolens as al
 import numpy as np
 import autofit as af
 from potential_correction import util as pul
-from potential_correction.visualize import show_fit_source, show_fit_source_al
+from potential_correction.visualize import show_fit_source_al
 import os
 import autolens.plot as aplt
 from potential_correction.covariance_reg import CovarianceRegularization

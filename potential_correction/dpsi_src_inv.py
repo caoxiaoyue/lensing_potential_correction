@@ -175,11 +175,11 @@ class FitDpsiSrcImaging:
     def __init__(
         self, 
         masked_imaging: al.Imaging,
-        anchor_points: np.ndarray,
         lens_start: al.Galaxy,
         source_start: SrcFactory,
         dpsi_pixelization: DpsiPixelization, #mesh + regularization properties
         src_pixelization: al.Pixelization,
+        anchor_points: Optional[np.ndarray] = np.array([[(), ()], [(), ()]]),
         adapt_image: Optional[al.Array2D] = None,
         settings_inversion: Optional[aa.SettingsInversion] = None,
         preloads: dict = None,
@@ -429,14 +429,42 @@ class FitDpsiSrcImaging:
 
         return solutions
 
+    
+    @property
+    def best_fit_source(self):
+        n_s = self.src_regularization_matrix.shape[0]
+        return self.src_dpsi_slim[0:n_s]
+
+
+    @property
+    def best_fit_dpsi(self):
+        n_s = self.src_regularization_matrix.shape[0]
+        return self.src_dpsi_slim[n_s:]
+
+
+    @property
+    def rescaled_dpsi(self):
+        try:
+            if not hasattr(self, 'dpsi_at_anchors'):
+                tri = Delaunay(np.fliplr(self.dpsi_points)) #to [[x1,y1], [x2, y2] ...] order
+                self.dpsi_interpl = pul.LinearNDInterpolatorExt(tri, self.best_fit_dpsi)
+                self.dpsi_at_anchors = self.dpsi_interpl(self.anchor_points[:, 1], self.anchor_points[:, 0])
+                #Suyu's dpsi rescaling scheme --> avoid wandering source position + uncertain constant factor of lensing potential
+            ay, ax, c = pul.solve_dpsi_rescale_factor(self.anchor_points, self.dpsi_at_anchors)
+            dpsi_new = ay*self.anchor_points[:, 0] + ax*self.anchor_points[:, 1] + c + self.best_fit_dpsi
+            return dpsi_new, ay, ax, c
+        except:
+            return self.best_fit_dpsi, 0.0, 0.0, 0.0
+      
+      
 
 class DpsiSrcInvAnalysis(af.Analysis):
     def __init__(
             self, 
             masked_imaging: al.Imaging,
-            anchor_points: np.ndarray,
             lens_start: al.Galaxy,
             source_start: SrcFactory,
+            anchor_points: Optional[np.ndarray] = np.array([[(), ()], [(), ()]]),
             adapt_image: Optional[al.Array2D] = None,
             settings_inversion: Optional[aa.SettingsInversion] = None,
             preloads: dict = None,

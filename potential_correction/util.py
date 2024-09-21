@@ -1597,4 +1597,8 @@ def multiple_results_from(fit=None, solutions=None, n_cpus=1):
     return model_images, norm_residual_images, dpsi_images, source_images, dkappa_images
 
 
-
+def solve_dpsi_rescale_factor(fix_points, dpsi_values):
+    A_matrix = np.hstack([fix_points, np.ones(3).reshape(3,1)])
+    b_vector = -1.0*dpsi_values
+    a_y, a_x, c = np.linalg.solve(A_matrix, b_vector)
+    return a_y, a_x, c

@@ -12,7 +12,14 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from potential_correction.util import multiple_results_from
 
 
-def imshow_masked_data(data_1d, mask_2d, dpix=None, ax=None, **kargs):
+def imshow_masked_data(
+    data_1d, 
+    mask_2d, 
+    dpix=None, 
+    ax=None,
+    n_contours=None,
+    **kargs
+):
     data_2d = np.zeros_like(mask_2d, dtype='float')
     data_2d[~mask_2d] = data_1d
     data_2d_masked = np.ma.masked_array(data_2d, mask=mask_2d)
@@ -24,9 +31,16 @@ def imshow_masked_data(data_1d, mask_2d, dpix=None, ax=None, **kargs):
         hw = mask_2d.shape[0] * dpix * 0.5
         extent = [-hw, hw, -hw, hw]
     im = ax.imshow(data_2d_masked, extent=extent, **kargs)
-    plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    plt.colorbar(im, cax=cax)
 
-    if dpix is not None:
+    if dpix is None:
+        if n_contours is not None:
+            raise Exception('dpix is None, cannot show contours')
+            #CS = ax.contour(data_2d_masked, levels=n_contours, colors='k', corner_mask=True)
+            #ax.clabel(CS, inline=True)
+    else:
         coord_1d = np.arange(len(mask_2d)) * dpix
         coord_1d = coord_1d - np.mean(coord_1d)
         xgrid, ygrid = np.meshgrid(coord_1d, coord_1d)
@@ -34,6 +48,11 @@ def imshow_masked_data(data_1d, mask_2d, dpix=None, ax=None, **kargs):
         limit = np.max(rgrid[~mask_2d])
         ax.set_xlim(-1.0*limit, limit)
         ax.set_ylim(-1.0*limit, limit)
+        if (n_contours is not None) and isinstance(n_contours, int):
+            xgrid = np.flipud(xgrid) #invert x/y-axis grid to ensure the contour is consistet with autolens imaging
+            ygrid = np.flipud(ygrid) 
+            CS = ax.contour(xgrid, ygrid, data_2d_masked, levels=n_contours, colors='k', corner_mask=True)
+            ax.clabel(CS, inline=True)
 
     return ax
 

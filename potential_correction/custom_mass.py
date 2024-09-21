@@ -453,7 +453,7 @@ class GaussianRandomField(MassProfile):
 
 
     def with_new_normalization(self, normalization):
-        mass_profile = copy.copy(self)
+        mass_profile = copy.copy(self) #NOTE, not works now
         mass_profile.einstein_radius = normalization
         return mass_profile
     
