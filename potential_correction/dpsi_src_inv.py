@@ -40,6 +40,15 @@ class SrcFactory(ABC):
         return src_grad_values.reshape(*origin_shape, 2)
 
 
+class AnalyticSrcFactory(SrcFactory):
+    def __init__(self, source_galaxy: al.Galaxy):
+        self.source_galaxy = source_galaxy
+
+    def eval_func(self, xgrid: np.ndarray, ygrid: np.ndarray):
+        grid_flat = np.vstack([ygrid.flat, xgrid.flat]).T
+        func_values = self.source_galaxy.image_2d_from(grid=grid_flat)
+        return func_values.reshape(xgrid.shape)
+
 
 class PixSrcFactory(SrcFactory):
     def __init__(self, points: np.ndarray, values: np.ndarray, rbf_interp: bool = True):
@@ -150,6 +159,10 @@ class PixSrcFactoryGPR(SrcFactory):
                 ker = GPy.kern.Matern52(2, ARD=False)
             elif self.scheme == "rbf":
                 ker = GPy.kern.RBF(2, ARD=False)
+            elif self.scheme == "matern32":
+                ker = GPy.kern.Matern32(2, ARD=False)
+            elif self.scheme == "exponential":
+                ker = GPy.kern.Exponential(2, ARD=False)
             else:
                 raise ValueError("Unsupported kernel type")
             self.interp_func = GPy.models.GPRegression(np.fliplr(self.points), self.values.reshape(-1, 1), ker)

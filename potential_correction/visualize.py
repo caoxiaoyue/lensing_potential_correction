@@ -10,7 +10,7 @@ import matplotlib as mpl
 import matplotlib.cm as cm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from potential_correction.util import multiple_results_from
-
+from matplotlib.ticker import MaxNLocator
 
 def imshow_masked_data(
     data_1d, 
@@ -18,8 +18,12 @@ def imshow_masked_data(
     dpix=None, 
     ax=None,
     n_contours=None,
+    n_cbar_ticks=None,
+    centralize=False,
     **kargs
 ):
+    if centralize:
+        data_1d = data_1d - np.median(data_1d)
     data_2d = np.zeros_like(mask_2d, dtype='float')
     data_2d[~mask_2d] = data_1d
     data_2d_masked = np.ma.masked_array(data_2d, mask=mask_2d)
@@ -33,7 +37,10 @@ def imshow_masked_data(
     im = ax.imshow(data_2d_masked, extent=extent, **kargs)
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.05)
-    plt.colorbar(im, cax=cax)
+    cbar = plt.colorbar(im, cax=cax)
+    if n_cbar_ticks is not None:
+        cbar.locator = MaxNLocator(nbins=n_cbar_ticks)
+        cbar.update_ticks()  # Update the ticks after setting the locator
 
     if dpix is None:
         if n_contours is not None:
@@ -125,6 +132,8 @@ def show_fit_dpsi(fit: FitDpsiImaging, output='result.png'):
     ax.set_xlim(*xlimit)
     ax.set_ylim(*ylimit)
 
+    this_path = os.path.dirname(output)
+    os.makedirs(this_path, exist_ok=True)
     plt.tight_layout()
     plt.savefig(output, bbox_inches='tight')
     plt.close()
@@ -200,6 +209,8 @@ def compare_fit_with_true_perturber(fit: FitDpsiImaging, true_perturber: al.Gala
     ax.set_xlim(*xlimit)
     ax.set_ylim(*ylimit)
 
+    this_path = os.path.dirname(output)
+    os.makedirs(this_path, exist_ok=True)
     plt.tight_layout()
     plt.savefig(output, bbox_inches='tight')
     plt.close()
