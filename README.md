@@ -1,19 +1,26 @@
-# potential_correction
-This is a wrapper utility of PyAuolens, aiming at implementing the "gravitational imaging technique" (also known as the "potential correction method") described in the following papers:
-1. https://arxiv.org/abs/astro-ph/0506629 
-2. https://arxiv.org/abs/astro-ph/0501324
-3. https://arxiv.org/abs/0804.2827
-4. https://arxiv.org/abs/0805.0201
+# Potential Correction
+This is a wrapper utility for **PyAutoLens** that implements the *gravitational‑imaging technique* (also known as the *potential correction method*). The algorithm recovers mass perturbations that a smooth, parametric lens‑mass model cannot capture by applying small corrections to the lensing potential on a pixelised grid. The potential correction method is particularly valuable for quantifying systematic errors introduced by oversimplified parametric mass models in several lensing applications, including substructure detection and time‑delay cosmography.
 
 
-The traditional potential correction method requires manual twisting of the level of regularization for both lensing potential and source brightness. We found that if we do not set the regularization parameters for the lensing perturbation properly, we are unable to recover the subhalo signal with the potential correction method. The example here demonstrates this point.
+Traditional implementations of potential correction require the practitioner to adjust manually the regularisation strength applied to both the lensing potential and the source brightness. The inverse problem is then solved iteratively, and inappropriate choices of these hyper‑parameters can lead to erroneous reconstructions. Vernardos et al. (2022) mitigated this limitation by determining the optimal regularisation levels for the lens and source objectively, through sampling the Bayesian evidence. Nevertheless, the regularisation schemes adopted by Vernardos et al. (2022) are optimised for extended perturbations—such as those described by a Gaussian random field—and are therefore less suitable for localised subhalo perturbers.
 
-![image](https://github.com/caoxiaoyue/potential_correction/raw/main/demo/install_guide/reg_effect.jpg)
 
-For this mock lens data, a small SIS subhalo is added at the location of the star symbol. Iterative potential correction, with different level of regularization for the lensing pertubation (from $10^6$ to $10^9$), is applied to this mock data. It is evident that only the $10^7$ regularization strength can recover the subhalo signal relatively well.
+Building on several seminal studies [1–6], we develop an new open‑source potential correction package which offers several key advantages over existing codes:    
+* It reconstructs the pixelised source and the perturbative lensing potential simultaneously, fully accounting for their covariance.  
+* It selects the optimal regularisation parameters for both the pixelised source and the perturbative lensing potential, by maximising the Bayesian evidence.  
+* It flexibly recovers localised as well as extended lensing potential perturbations, facilitated by Mat\'ern regularisation.
+* The entire modelling workflow is fully automated and requires no manual fine‑tuning.  
 
-We are currently developing a new framework to determine the regularization parameters for the lens and source simultaneously and objectively by optimizing the Bayesian evidence. This new framework is a further improvement of Vernardos et al. 2022 (https://arxiv.org/abs/2202.09378). 
 
-This code is compatible with autolens==2023.10.23.3. To install the code, you can follow the bash script `install.sh`, which create a virtual environment and install all the required packages to run the potential correction code using anaconda.
+Our potential correction code is compatible with `autolens` version 2024.1.27.4. To install the software, download the Bash script `install.sh` from this repository and execute it (`bash install.sh` in your Linux terminal). This script creates a dedicated Conda environment and installs all necessary dependencies. 
 
-If you find this work useful, please cite the Cao et al. 2024 in prep.
+
+If you make use of this software, please cite Cao et al. (2025, in preparation). To reproduce the results and figures presented in Cao et al. (2025, in preparation), please refer to the scripts within this GitHub repository: https://github.com/caoxiaoyue/potential_correction_paper.
+
+---
+[1] https://arxiv.org/abs/astro-ph/0506629  
+[2] https://arxiv.org/abs/astro-ph/0501324  
+[3] https://arxiv.org/abs/0804.2827  
+[4] https://arxiv.org/abs/0805.0201  
+[5] https://arxiv.org/abs/1811.03627  
+[6] https://arxiv.org/abs/2202.09378
